@@ -1,0 +1,10 @@
+FROM pytorch/pytorch:2.11.0-cuda12.8-cudnn9-runtime
+WORKDIR /app
+RUN apt-get update && apt-get install -y \
+    libsndfile1 ffmpeg git \
+    && rm -rf /var/lib/apt/lists/*
+COPY requirements.tts.txt /app/requirements.tts.txt
+RUN pip install --no-cache-dir -r /app/requirements.tts.txt
+COPY heather_tts_service.py /app/heather_tts_service.py
+EXPOSE 5001
+CMD ["python", "/app/heather_tts_service.py"]

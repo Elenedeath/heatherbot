@@ -56,14 +56,6 @@ from postprocess import (
     strip_quote_wrapping
 )
 
-# Load .env file if python-dotenv is available
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-    print("[OK] Loaded .env file")
-except ImportError:
-    pass
-
 # Parse command-line arguments
 parser = argparse.ArgumentParser(description='Heather Telegram Userbot v3.0 - Telethon Edition')
 parser.add_argument('--unfiltered', action='store_true', help='Run without content filters')
@@ -75,7 +67,6 @@ parser.add_argument('--log-dir', type=str, default='logs', help='Log directory p
 parser.add_argument('--tts-port', type=int, default=5001, help='TTS service port (default: 5001)')
 parser.add_argument('--personality', type=str, default='persona_example.yaml', help='Personality YAML file path')
 parser.add_argument('--small-model', action='store_true', help='Use optimized prompt for 12B models')
-parser.add_argument('--session', type=str, default='heather_session', help='Telethon session file name')
 args = parser.parse_args()
 SMALL_MODEL_MODE = args.small_model
 
@@ -87,7 +78,63 @@ API_HASH = os.getenv("TELEGRAM_API_HASH", "")
 if not API_ID or not API_HASH:
     print("ERROR: TELEGRAM_API_ID and TELEGRAM_API_HASH must be set in .env or environment")
     sys.exit(1)
-SESSION_NAME = args.session
+SESSION_NAME = os.getenv("SESSION_NAME", "heather_session")
+
+# Admin configuration
+ADMIN_USER_ID = int(os.getenv("ADMIN_USER_ID", "0"))
+
+# ============================================================================
+# COMFYUI CONFIGURATION
+# ============================================================================
+UNFILTERED_MODE = os.getenv("UNFILTERED_MODE", "false").lower() == "true"
+MONITORING_ENABLED = os.getenv("MONITORING_ENABLED", "false").lower() == "true"
+MONITORING_PORT = int(os.getenv("MONITORING_PORT", "8888"))
+ALERT_COOLDOWN_SECONDS = int(os.getenv("ALERT_COOLDOWN_SECONDS", "300"))  # Don't spam alerts more than once per 5 minutes per issue
+
+# Endpoints
+TEXT_HOST = os.getenv("TEXT_HOST", "127.0.0.1")
+TEXT_PORT = int(os.getenv("TEXT_PORT", "1234"))
+TEXT_ENDPOINT = f"http://{TEXT_HOST}:{TEXT_PORT}"
+TEXT_AI_ENDPOINT = f"http://{TEXT_HOST}:{TEXT_PORT}/v1/chat/completions"
+
+IMAGE_HOST = os.getenv("IMAGE_HOST", "127.0.0.1")
+IMAGE_PORT = int(os.getenv("IMAGE_PORT", "11434"))
+IMAGE_AI_ENDPOINT = f"http://{IMAGE_HOST}:{IMAGE_PORT}"
+
+TTS_HOST = os.getenv("TTS_HOST", "127.0.0.1")
+TTS_PORT = int(os.getenv("TTS_PORT", "5001"))
+TTS_ENDPOINT = f"http://{TTS_HOST}:{TTS_PORT}"
+
+COMFYUI_HOST = os.getenv("COMFYUI_HOST", "127.0.0.1")
+COMFYUI_PORT = int(os.getenv("COMFYUI_PORT", "8188"))
+COMFYUI_URL = f"http://{COMFYUI_HOST}:{COMFYUI_PORT}"
+
+# ComfyUI settings — FLUX.1 dev pipeline
+WORKFLOW_FILE = "workflow_flux.json"
+POSITIVE_PROMPT_NODE = "3"
+NEGATIVE_PROMPT_NODE = "4"
+FACE_IMAGE_NODE = "10"
+FINAL_OUTPUT_NODE = "9"  # Save FINAL (Face Swapped + Blended)
+HEATHER_FACE_IMAGE = os.getenv("COMFYUI_FACE_IMAGE", "heather_face.png")
+FLUX_GUIDANCE = 5.0
+EMMA_HIKING_PHOTO = "sfw/casual/518393309_24449331331317269_8182893831074081262_n.jpg"
+EMMA_HIKING_ID = "sfw_casual_068"
+
+# FLUX uses natural language (no SDXL-style weighted tokens)
+HEATHER_PROMPT_PREFIX_SFW = "a mature woman with platinum silver shoulder length hair and blue eyes, soft natural body with medium breasts, "
+HEATHER_PROMPT_PREFIX_NSFW = "a mature woman with platinum silver shoulder length hair and blue eyes, medium natural breasts, bare breasts with small pink nipples, "
+HEATHER_PROMPT_SUFFIX = ", natural lighting, authentic amateur photo taken with phone camera, high quality, realistic skin with pores and texture and slight imperfections, detailed hands with five fingers"
+HEATHER_PROMPT_SUFFIX_NSFW = ", natural lighting, authentic amateur photo taken with phone camera, high quality, realistic skin with visible pores and fine lines and freckles and subtle veins, skin texture like a real photograph not airbrushed, slight imperfections and moles, detailed anatomy, two arms only, two legs only, correct number of limbs, detailed hands with five fingers"
+# FLUX ignores negative prompts (node 4 is empty), but kept for compatibility
+HEATHER_NEGATIVE_PROMPT = ""
+
+# ControlNet Pose settings — FLUX ControlNet Union Pro 2.0
+CONTROLNET_MODEL = "FLUX-controlnet-union-pro-2.0.safetensors"
+CONTROLNET_STRENGTH = 0.65
+CONTROLNET_END = 0.65
+
+AUDIOBOOK_DIR = "C:/AI/audiobooks"
+AUDIOBOOK_AUDIO_DIR = os.path.join(AUDIOBOOK_DIR, "audio")
 
 # ============================================================================
 # LOGGING SETUP - Centralized Multi-Service Logging
@@ -351,33 +398,8 @@ class PersonalityLoader:
 personality = PersonalityLoader(args.personality)
 
 # ============================================================================
-# CONFIGURATION
+# COMFYUI
 # ============================================================================
-
-UNFILTERED_MODE = args.unfiltered
-MONITORING_ENABLED = args.monitoring
-MONITORING_PORT = 8888
-
-# Admin configuration
-ADMIN_USER_ID = int(os.getenv("ADMIN_USER_ID", "0"))  # Set in .env for admin commands
-ALERT_COOLDOWN_SECONDS = 300  # Don't spam alerts more than once per 5 minutes per issue
-
-# Endpoints
-TEXT_AI_ENDPOINT = f"http://127.0.0.1:{args.text_port}/v1/chat/completions"
-IMAGE_AI_ENDPOINT = f"http://localhost:{args.image_port}"
-TTS_ENDPOINT = f"http://127.0.0.1:{args.tts_port}"
-COMFYUI_URL = "http://127.0.0.1:8188"
-
-# ComfyUI settings — FLUX.1 dev pipeline
-WORKFLOW_FILE = "workflow_flux.json"
-POSITIVE_PROMPT_NODE = "3"
-NEGATIVE_PROMPT_NODE = "4"
-FACE_IMAGE_NODE = "10"
-FINAL_OUTPUT_NODE = "9"  # Save FINAL (Face Swapped + Blended)
-HEATHER_FACE_IMAGE = os.getenv("COMFYUI_FACE_IMAGE", "heather_face.png")
-FLUX_GUIDANCE = 5.0
-EMMA_HIKING_PHOTO = "sfw/casual/518393309_24449331331317269_8182893831074081262_n.jpg"
-EMMA_HIKING_ID = "sfw_casual_068"
 
 # Keywords that indicate someone is asking about Emma / wants to see Emma
 EMMA_ASK_KEYWORDS = [
@@ -403,19 +425,6 @@ def is_emma_photo_request(message: str) -> bool:
     """Check if someone is asking to see Emma or a photo with Emma."""
     msg_lower = message.lower()
     return any(kw in msg_lower for kw in EMMA_ASK_KEYWORDS)
-
-# FLUX uses natural language (no SDXL-style weighted tokens)
-HEATHER_PROMPT_PREFIX_SFW = "a mature woman with platinum silver shoulder length hair and blue eyes, soft natural body with medium breasts, "
-HEATHER_PROMPT_PREFIX_NSFW = "a mature woman with platinum silver shoulder length hair and blue eyes, medium natural breasts, bare breasts with small pink nipples, "
-HEATHER_PROMPT_SUFFIX = ", natural lighting, authentic amateur photo taken with phone camera, high quality, realistic skin with pores and texture and slight imperfections, detailed hands with five fingers"
-HEATHER_PROMPT_SUFFIX_NSFW = ", natural lighting, authentic amateur photo taken with phone camera, high quality, realistic skin with visible pores and fine lines and freckles and subtle veins, skin texture like a real photograph not airbrushed, slight imperfections and moles, detailed anatomy, two arms only, two legs only, correct number of limbs, detailed hands with five fingers"
-# FLUX ignores negative prompts (node 4 is empty), but kept for compatibility
-HEATHER_NEGATIVE_PROMPT = ""
-
-# ControlNet Pose settings — FLUX ControlNet Union Pro 2.0
-CONTROLNET_MODEL = "FLUX-controlnet-union-pro-2.0.safetensors"
-CONTROLNET_STRENGTH = 0.65
-CONTROLNET_END = 0.65
 
 # FLUX POSE_MAP — natural language prompt boosts, no SDXL weighted tokens
 # Most poses work better prompt-only; ControlNet reserved for back-facing poses
@@ -667,9 +676,6 @@ image_library: list = []                             # All image metadata entrie
 images_sent_to_user: Dict[int, Dict[str, set]] = {}  # chat_id -> {category -> set of image IDs}
 _image_file_cache: Dict[str, object] = {}            # image_id -> Telegram file reference
 _last_captions_sent: Dict[int, deque] = {}           # caption dedup per user (maxlen=5)
-
-AUDIOBOOK_DIR = "C:/AI/audiobooks"
-AUDIOBOOK_AUDIO_DIR = os.path.join(AUDIOBOOK_DIR, "audio")
 
 # Storage
 conversations: Dict[int, deque] = {}
@@ -5152,7 +5158,7 @@ async def verify_services_at_startup() -> dict:
 
 def check_text_ai_status() -> tuple[bool, str]:
     try:
-        response = requests.get(f"http://127.0.0.1:{args.text_port}/v1/models", timeout=5)
+        response = requests.get(f"{TEXT_ENDPOINT}/v1/models", timeout=5)
         if response.status_code == 200:
             data = response.json()
             models = data.get('data', [])
