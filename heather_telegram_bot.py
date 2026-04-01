@@ -115,7 +115,7 @@ POSITIVE_PROMPT_NODE = "3"
 NEGATIVE_PROMPT_NODE = "4"
 FACE_IMAGE_NODE = "10"
 FINAL_OUTPUT_NODE = "9"  # Save FINAL (Face Swapped + Blended)
-HEATHER_FACE_IMAGE = os.getenv("COMFYUI_FACE_IMAGE", "heather_face.png")
+HEATHER_FACE_IMAGE = os.getenv("COMFYUI_FACE_IMAGE")
 FLUX_GUIDANCE = 5.0
 EMMA_HIKING_PHOTO = "sfw/casual/518393309_24449331331317269_8182893831074081262_n.jpg"
 EMMA_HIKING_ID = "sfw_casual_068"
@@ -5203,8 +5203,35 @@ def check_tts_status() -> tuple[bool, str]:
     except Exception:
         return False, "Offline"
 
+# def check_heather_face() -> bool:
+    # return os.path.exists(HEATHER_FACE_IMAGE)
 def check_heather_face() -> bool:
-    return os.path.exists(HEATHER_FACE_IMAGE)
+    path = Path(HEATHER_FACE_IMAGE)
+
+    main_logger.info(f"[SELFIE] COMFYUI_FACE_IMAGE={os.getenv('COMFYUI_FACE_IMAGE')}")
+    main_logger.info(f"[SELFIE] HEATHER_FACE_IMAGE={HEATHER_FACE_IMAGE}")
+    main_logger.info(f"[SELFIE] cwd={Path.cwd()}")
+    main_logger.info(f"[SELFIE] resolved={path.resolve()}")
+
+    if not HEATHER_FACE_IMAGE:
+        main_logger.error("COMFYUI_FACE_IMAGE var not set")
+        HEATHER_FACE_IMAGE = None
+    
+    if not path.exists():
+        main_logger.warning(f"[SELFIE] Face image missing: {path}")
+        return False
+
+    if not path.is_file():
+        main_logger.warning(f"[SELFIE] Face image is not a file: {path}")
+        return False
+
+    if path.stat().st_size == 0:
+        main_logger.warning(f"[SELFIE] Face image is empty: {path}")
+        return False
+
+    main_logger.info(f"[SELFIE] Face image OK: {path}")
+    return True
+
 
 # ============================================================================
 # AI RESPONSE FUNCTIONS

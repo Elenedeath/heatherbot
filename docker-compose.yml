@@ -57,6 +57,7 @@ services:
       - ./videos:/app/videos
       - ./images_db:/app/images_db
       - ./persona_example.yaml:/app/persona_example.yaml
+      - C:/ComfyUI/ComfyUI/input:/app/ComfyUI/input:ro
     ports:
       - "8888:8888"
 

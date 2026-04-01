@@ -1,3 +1,3 @@
 chatterbox-tts>=0.1.7
 flask>=3.1.1
-torchaudio
+optree>=0.13.0

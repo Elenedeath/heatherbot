@@ -1,10 +1,21 @@
-FROM pytorch/pytorch:2.11.0-cuda12.8-cudnn9-runtime
+FROM python:3.11.12-slim-bookworm
 WORKDIR /app
+
 RUN apt-get update && apt-get install -y \
     libsndfile1 ffmpeg git \
     && rm -rf /var/lib/apt/lists/*
-COPY requirements.tts.txt /app/requirements.tts.txt
-RUN pip install --no-cache-dir -r /app/requirements.tts.txt
-COPY heather_tts_service.py /app/heather_tts_service.py
+
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir \
+    torch==2.6.0+cu124 \
+    torchvision==0.21.0+cu124 \
+    torchaudio==2.6.0+cu124 \
+    --index-url https://download.pytorch.org/whl/cu124
+
+COPY requirements.tts.txt .
+RUN pip install --no-cache-dir -r requirements.tts.txt
+
+COPY heather_tts_service.py .
+
 EXPOSE 5001
 CMD ["python", "/app/heather_tts_service.py"]
