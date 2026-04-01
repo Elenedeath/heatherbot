@@ -16,7 +16,7 @@ services:
       - TELEGRAM_API_HASH=CHANGE_ME
 
       # Admin Telegram user ID (your personal account numeric ID)
-      - ADMIN_USER_ID=0
+      - ADMIN_USER_ID=CHANGE_ME
 
       # Telethon Imports
       - SESSION_NAME=/app/sessions/heather_session
@@ -49,7 +49,7 @@ services:
       - ALERT_COOLDOWN_SECONDS=300
 
       # ComfyUI face-swap source image path (for image generation)
-      - COMFYUI_FACE_IMAGE=C:/ComfyUI/ComfyUI/input/heather_face.png
+      - COMFYUI_FACE_IMAGE=/app/ComfyUI/input/heather_face.png
 
     volumes:
       - ./sessions:/app/sessions
@@ -96,6 +96,8 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
+    environment:
+      - HF_TOKEN=CHANGE_ME  # token free on huggingface.co/settings/tokens
     volumes:
       - chatterbox-cache:/root/.cache/huggingface
     ports:

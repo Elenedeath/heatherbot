@@ -110,7 +110,7 @@ COMFYUI_PORT = int(os.getenv("COMFYUI_PORT", "8188"))
 COMFYUI_URL = f"http://{COMFYUI_HOST}:{COMFYUI_PORT}"
 
 # ComfyUI settings — FLUX.1 dev pipeline
-WORKFLOW_FILE = "workflow_flux.json"
+WORKFLOW_FILE = "/app/workflow_flux.json"
 POSITIVE_PROMPT_NODE = "3"
 NEGATIVE_PROMPT_NODE = "4"
 FACE_IMAGE_NODE = "10"
@@ -5206,6 +5206,10 @@ def check_tts_status() -> tuple[bool, str]:
 # def check_heather_face() -> bool:
     # return os.path.exists(HEATHER_FACE_IMAGE)
 def check_heather_face() -> bool:
+    if not HEATHER_FACE_IMAGE:
+        main_logger.error("COMFYUI_FACE_IMAGE var not set")
+        return False
+
     path = Path(HEATHER_FACE_IMAGE)
 
     main_logger.info(f"[SELFIE] COMFYUI_FACE_IMAGE={os.getenv('COMFYUI_FACE_IMAGE')}")
@@ -5213,10 +5217,6 @@ def check_heather_face() -> bool:
     main_logger.info(f"[SELFIE] cwd={Path.cwd()}")
     main_logger.info(f"[SELFIE] resolved={path.resolve()}")
 
-    if not HEATHER_FACE_IMAGE:
-        main_logger.error("COMFYUI_FACE_IMAGE var not set")
-        HEATHER_FACE_IMAGE = None
-    
     if not path.exists():
         main_logger.warning(f"[SELFIE] Face image missing: {path}")
         return False
