@@ -4,7 +4,7 @@ import tempfile
 from chatterbox.tts_turbo import ChatterboxTurboTTS
 
 app = Flask(__name__)
-model = ChatterboxTurboTTS.from_pretrained(device="cuda")
+model = ChatterboxTurboTTS.from_pretrained(device="cpu")
 
 @app.route("/health", methods=["GET"])
 def health():
