@@ -133,9 +133,6 @@ CONTROLNET_MODEL = "FLUX-controlnet-union-pro-2.0.safetensors"
 CONTROLNET_STRENGTH = 0.65
 CONTROLNET_END = 0.65
 
-AUDIOBOOK_DIR = "C:/AI/audiobooks"
-AUDIOBOOK_AUDIO_DIR = os.path.join(AUDIOBOOK_DIR, "audio")
-
 # ============================================================================
 # LOGGING SETUP - Centralized Multi-Service Logging
 # ============================================================================
@@ -582,7 +579,6 @@ VIDEO_REQUEST_TRIGGERS = [
     "record a video", "film something", "send video",
     "prefer a vid", "want a vid", "like a vid", "see a vid",
     "prefer a video", "want a video", "like a video",
-    "video",
     # Third-person triggers
     "her videos", "her vids", "her video", "her vid",
     "videos of her", "vids of her", "video of her", "vid of her",
@@ -5540,7 +5536,7 @@ def get_text_ai_response(chat_id: int, user_message: str, retry_count: int = 0, 
             elif length_roll < 0.70:
                 max_tokens = random.randint(100, 150)
             else:
-                max_tokens = random.randint(140, 210)
+                max_tokens = random.randint(160, 280)
 
         # On retry, give more room to avoid repeated truncation
         if retry_count > 0:
@@ -5565,7 +5561,7 @@ def get_text_ai_response(chat_id: int, user_message: str, retry_count: int = 0, 
         # Sexual energy token boost
         _energy = get_conversation_energy(chat_id)
         if _energy == "hot":
-            max_tokens = max(max_tokens, 130)
+            max_tokens = max(max_tokens, 180)
 
         # Narrative request detection — "tell me a story", "Navy stories", etc.
         # These need more tokens even outside formal story mode

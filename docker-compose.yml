@@ -1,5 +1,4 @@
 services:
-
   # ─── Heather Bot ─────────────────────────────────────────────────────────────
   heather:
     build:
@@ -30,6 +29,8 @@ services:
       # Monitoring dashboard auth key (leave empty for open access on localhost)
       - MONITOR_AUTH_TOKEN=CHANGE_ME
 
+      - HF_TOKEN=CHANGE_ME  # token free on huggingface.co/settings/tokens
+
       # ── Internal Docker Services ──────────────────────────────────────────────
       - TEXT_HOST=llama-server
       - TEXT_PORT=1234
@@ -37,7 +38,7 @@ services:
       - TTS_PORT=5001
 
       # ── External Services ─────────────────────────────────────────────────────
-      - IMAGE_HOST=192.168.2.10
+      - IMAGE_HOST=192.168.2.47
       - IMAGE_PORT=11434
       - COMFYUI_HOST=192.168.2.10
       - COMFYUI_PORT=8188
@@ -80,11 +81,11 @@ services:
     volumes:
       - C:/llama-cpp/models:/models:ro
     command: >
-      --model /models/dolphin-2.9.3-mistral-nemo-12b.Q6_K.gguf
+      --model /models/mradermacher_dolphin-2.9.3-mistral-nemo-12b-Q4_K_M.gguf
       --host 0.0.0.0
       --port 1234
       --n-gpu-layers 99
-      --ctx-size 6144
+      --ctx-size 4096
     ports:
       - "1234:1234"
 

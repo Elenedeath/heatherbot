@@ -52,6 +52,7 @@ chat_logs/
 # Creator persona (your private personality file)
 heather_personality.yaml
 heather_stories.yaml
+storybank.json
 
 # Media (creator content — provide your own)
 images_db/
