@@ -41,6 +41,11 @@ services:
       - IMAGE_PORT=11434
       - COMFYUI_HOST=192.168.2.10
       - COMFYUI_PORT=8188
+      - AI_TIMEOUT=120
+      - COMFYUI_TIMEOUT=300
+      - TTS_TIMEOUT=120
+      - WORKFLOW_FILE=/app/workflow_flux.json
+      - FINAL_OUTPUT_NODE=9
 
       # ── Comfyui Configuration ─────────────────────────────────────────────────
       - UNFILTERED_MODE=true

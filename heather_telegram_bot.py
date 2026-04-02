@@ -110,7 +110,7 @@ COMFYUI_PORT = int(os.getenv("COMFYUI_PORT", "8188"))
 COMFYUI_URL = f"http://{COMFYUI_HOST}:{COMFYUI_PORT}"
 
 # ComfyUI settings — FLUX.1 dev pipeline
-WORKFLOW_FILE = "/app/workflow_flux.json"
+WORKFLOW_FILE = os.getenv("WORKFLOW_FILE", "/app/workflow_flux.json")
 POSITIVE_PROMPT_NODE = "3"
 NEGATIVE_PROMPT_NODE = "4"
 FACE_IMAGE_NODE = "10"
@@ -2652,9 +2652,9 @@ def get_uptime() -> str:
 # Constants
 MAX_CONVERSATION_LENGTH = 20
 MIN_MESSAGE_INTERVAL = 1.5
-AI_TIMEOUT = 120
-COMFYUI_TIMEOUT = 300  # FLUX.1 dev takes ~60s warm, ~120s cold load
-TTS_TIMEOUT = 120
+AI_TIMEOUT = int(os.getenv("AI_TIMEOUT", "120"))
+COMFYUI_TIMEOUT = int(os.getenv("COMFYUI_TIMEOUT", "300"))  # FLUX.1 dev takes ~60s warm, ~120s cold load
+TTS_TIMEOUT = int(os.getenv("TTS_TIMEOUT", "120"))
 MAX_RETRIES = 3
 DEFAULT_MODE = 'chat'
 MAX_RECENT_MESSAGES = 50
@@ -5203,19 +5203,14 @@ def check_tts_status() -> tuple[bool, str]:
     except Exception:
         return False, "Offline"
 
-# def check_heather_face() -> bool:
-    # return os.path.exists(HEATHER_FACE_IMAGE)
 def check_heather_face() -> bool:
     if not HEATHER_FACE_IMAGE:
         main_logger.error("COMFYUI_FACE_IMAGE var not set")
         return False
 
     path = Path(HEATHER_FACE_IMAGE)
-
-    main_logger.info(f"[SELFIE] COMFYUI_FACE_IMAGE={os.getenv('COMFYUI_FACE_IMAGE')}")
-    main_logger.info(f"[SELFIE] HEATHER_FACE_IMAGE={HEATHER_FACE_IMAGE}")
-    main_logger.info(f"[SELFIE] cwd={Path.cwd()}")
-    main_logger.info(f"[SELFIE] resolved={path.resolve()}")
+    main_logger.info(f"[SELFIE] COMFYUI_FACE_IMAGE={HEATHER_FACE_IMAGE}")
+    main_logger.info(f"[SELFIE] basename sent to ComfyUI: '{path.name}'")
 
     if not path.exists():
         main_logger.warning(f"[SELFIE] Face image missing: {path}")
@@ -6025,11 +6020,7 @@ COMFYUI_WORKFLOW = load_comfyui_workflow(WORKFLOW_FILE)
 
 def queue_comfyui_prompt(workflow: dict) -> str:
     data = json.dumps({"prompt": workflow}).encode('utf-8')
-    req = urllib.request.Request(
-        f"{COMFYUI_URL}/prompt",
-        data=data,
-        headers={'Content-Type': 'application/json'}
-    )
+    req = urllib.request.Request(f"{COMFYUI_URL}/prompt", data=data, headers={"Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=30) as response:
         result = json.loads(response.read().decode('utf-8'))
         return result.get('prompt_id')
@@ -6256,7 +6247,7 @@ def generate_heather_image(user_description: str, progress_callback=None) -> byt
 
                 outputs = history[prompt_id].get('outputs', {})
                 # Prefer node 9 (face-swapped final), fall back to node 12 (preview)
-                for node_id in [FINAL_OUTPUT_NODE, "12"]:
+                for node_id in [FINAL_OUTPUT_NODE, "12", "8"]:
                     node_output = outputs.get(node_id, {})
                     if 'images' in node_output:
                         for img in node_output['images']:
@@ -6266,6 +6257,16 @@ def generate_heather_image(user_description: str, progress_callback=None) -> byt
                                 img.get('type', 'output')
                             )
                             if image_data and is_valid_image_data(image_data):
+                                try:
+                                    from PIL import Image
+                                    import io as _io
+                                    pil = Image.open(_io.BytesIO(image_data)).convert('L')
+                                    brightness = sum(pil.getdata()) / len(pil.getdata())
+                                    if brightness < 5:
+                                        main_logger.warning(f"Node {node_id} output is black (brightness={brightness:.1f}), trying next node")
+                                        continue
+                                except Exception:
+                                    pass  # Si PIL échoue, on envoie quand même
                                 stats['images_generated'] += 1
                                 main_logger.info(f"Generated FLUX image: {len(image_data)} bytes from node {node_id}")
                                 return image_data
