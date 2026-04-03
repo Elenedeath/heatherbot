@@ -8649,8 +8649,7 @@ if MONITORING_ENABLED:
             return None  # /health stays public for monitoring scripts
         if not MONITOR_AUTH_TOKEN:
             return None  # No token configured = open access
-        token = (flask_request.args.get('token') or '').rstrip('&')
-        token = token or flask_request.headers.get('X-Auth-Token', '').rstrip('&')
+        token = flask_request.args.get('token') or flask_request.headers.get('X-Auth-Token', '')
         if token != MONITOR_AUTH_TOKEN:
             return "Unauthorized", 401
 

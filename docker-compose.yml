@@ -33,6 +33,7 @@ services:
       - MONITORING_HOST=0.0.0.0
       - MONITORING_PORT=8888
       # Monitoring dashboard auth key (leave empty for open access on localhost)
+      # don't use & on your token or you will never access it
       - MONITOR_AUTH_TOKEN=CHANGE_ME
 
       # ── HuggingFace Token ───────────────────────────────────────────────────────
