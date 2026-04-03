@@ -32,6 +32,7 @@ services:
       - MONITORING_ENABLED=true
       - MONITORING_HOST=0.0.0.0
       - MONITORING_PORT=8888
+      # Monitoring dashboard auth key (leave empty for open access on localhost)
       - MONITOR_AUTH_TOKEN=CHANGE_ME
 
       # ── HuggingFace Token ───────────────────────────────────────────────────────
@@ -50,8 +51,6 @@ services:
       - IMAGE_HOST=192.168.2.47
       - IMAGE_PORT=11434
       - AI_TIMEOUT=120
-
-
 
       # ── Comfyui Configuration ───────────────────────────────────────────────────
       - COMFYUI_HOST=192.168.2.10

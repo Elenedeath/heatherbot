@@ -88,8 +88,9 @@ ADMIN_USER_ID = int(os.getenv("ADMIN_USER_ID", "0"))
 # ============================================================================
 UNFILTERED_MODE = os.getenv("UNFILTERED_MODE", "false").lower() == "true"
 MONITORING_ENABLED = os.getenv("MONITORING_ENABLED", "false").lower() == "true"
-MONITORING_HOST = int(os.getenv("MONITORING_HOST", "127.0.0.1"))
+MONITORING_HOST = os.getenv("MONITORING_HOST", "127.0.0.1")
 MONITORING_PORT = int(os.getenv("MONITORING_PORT", "8888"))
+MONITOR_AUTH_TOKEN = os.getenv("MONITOR_AUTH_TOKEN", "")
 ALERT_COOLDOWN_SECONDS = int(os.getenv("ALERT_COOLDOWN_SECONDS", "300"))  # Don't spam alerts more than once per 5 minutes per issue
 
 # Endpoints
@@ -8641,8 +8642,6 @@ async def handle_text_message(event):
 
 if MONITORING_ENABLED:
     monitor_app = Flask(__name__)
-
-    MONITOR_AUTH_TOKEN = os.getenv("MONITOR_AUTH_TOKEN", os.getenv("HEATHER_DASHBOARD_KEY", ""))
 
     @monitor_app.before_request
     def check_dashboard_auth():
