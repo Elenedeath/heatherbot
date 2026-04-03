@@ -88,6 +88,7 @@ ADMIN_USER_ID = int(os.getenv("ADMIN_USER_ID", "0"))
 # ============================================================================
 UNFILTERED_MODE = os.getenv("UNFILTERED_MODE", "false").lower() == "true"
 MONITORING_ENABLED = os.getenv("MONITORING_ENABLED", "false").lower() == "true"
+MONITORING_HOST = int(os.getenv("MONITORING_HOST", "127.0.0.1"))
 MONITORING_PORT = int(os.getenv("MONITORING_PORT", "8888"))
 ALERT_COOLDOWN_SECONDS = int(os.getenv("ALERT_COOLDOWN_SECONDS", "300"))  # Don't spam alerts more than once per 5 minutes per issue
 
@@ -9013,8 +9014,9 @@ if MONITORING_ENABLED:
 
 def run_monitoring():
     if MONITORING_ENABLED:
+        main_logger.info(f"Starting monitoring on ip {MONITORING_HOST}")
         main_logger.info(f"Starting monitoring on port {MONITORING_PORT}")
-        monitor_app.run(host='127.0.0.1', port=MONITORING_PORT, debug=False, use_reloader=False)
+        monitor_app.run(host=MONITORING_HOST, port=MONITORING_PORT, debug=False, use_reloader=False)
 
 # ============================================================================
 # MAIN ENTRY POINT
@@ -9067,7 +9069,7 @@ async def main():
     if MONITORING_ENABLED:
         monitor_thread = threading.Thread(target=run_monitoring, daemon=True)
         monitor_thread.start()
-        main_logger.info(f"Monitoring: http://localhost:{MONITORING_PORT}")
+        main_logger.info(f"Monitoring: http://{MONITORING_HOST}:{MONITORING_PORT}")
 
     # Start periodic cleanup of inactive users with exception handling
     async def _periodic_cleanup():

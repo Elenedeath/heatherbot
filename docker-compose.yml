@@ -1,5 +1,5 @@
 services:
-  # ─── Heather Bot ─────────────────────────────────────────────────────────────
+  # ─── Heather Bot ─────────────────────────────────────────────────────────────-──
   heather:
     build:
       context: .
@@ -10,6 +10,7 @@ services:
       - llama-server
       - chatterbox-tts
     environment:
+      # ── Telegram Configuration ──────────────────────────────────────────────────
       # Telegram credentials (from https://my.telegram.org)
       - TELEGRAM_API_ID=CHANGE_ME
       - TELEGRAM_API_HASH=CHANGE_ME
@@ -20,39 +21,46 @@ services:
       # Telethon Imports
       - SESSION_NAME=/app/sessions/heather_session
 
+      # ── Payment bot Configuration ───────────────────────────────────────────────
       # Payment bot token (from @BotFather — optional, for Telegram Stars tipping)
       - PAYMENT_BOT_TOKEN=CHANGE_ME
 
       # Payment bot @username (no @ prefix) — used in tip messages
       - PAYMENT_BOT_USERNAME=CHANGE_ME
 
-      # Monitoring dashboard auth key (leave empty for open access on localhost)
+      # ── Monitoring Configuration ────────────────────────────────────────────────
+      - MONITORING_ENABLED=true
+      - MONITORING_HOST=0.0.0.0
+      - MONITORING_PORT=8888
       - MONITOR_AUTH_TOKEN=CHANGE_ME
 
+      # ── HuggingFace Token ───────────────────────────────────────────────────────
       - HF_TOKEN=CHANGE_ME  # token free on huggingface.co/settings/tokens
 
-      # ── Internal Docker Services ──────────────────────────────────────────────
+      # ── Text Services ───────────────────────────────────────────────────────────
       - TEXT_HOST=llama-server
       - TEXT_PORT=1234
+      
+      # ── TTS Services ────────────────────────────────────────────────────────────
       - TTS_HOST=chatterbox-tts
       - TTS_PORT=5001
+      - TTS_TIMEOUT=120
 
-      # ── External Services ─────────────────────────────────────────────────────
+      # ── Ollama Services ─────────────────────────────────────────────────────────
       - IMAGE_HOST=192.168.2.47
       - IMAGE_PORT=11434
+      - AI_TIMEOUT=120
+
+
+
+      # ── Comfyui Configuration ───────────────────────────────────────────────────
       - COMFYUI_HOST=192.168.2.10
       - COMFYUI_PORT=8188
-      - AI_TIMEOUT=120
       - COMFYUI_TIMEOUT=300
-      - TTS_TIMEOUT=120
+      - UNFILTERED_MODE=true
+      - ALERT_COOLDOWN_SECONDS=300
       - WORKFLOW_FILE=/app/workflow_flux.json
       - FINAL_OUTPUT_NODE=9
-
-      # ── Comfyui Configuration ─────────────────────────────────────────────────
-      - UNFILTERED_MODE=true
-      - MONITORING_ENABLED=true
-      - MONITORING_PORT=8888
-      - ALERT_COOLDOWN_SECONDS=300
 
       # ComfyUI face-swap source image path (for image generation)
       - COMFYUI_FACE_IMAGE=/app/ComfyUI/input/heather_face.png
@@ -67,7 +75,7 @@ services:
     ports:
       - "8888:8888"
 
-  # ─── LLM Backend ─────────────────────────────────────────────────────────────
+  # ─── LLM Backend ────────────────────────────────────────────────────────────────
   llama-server:
     image: ghcr.io/ggml-org/llama.cpp:server-cuda12
     restart: unless-stopped
@@ -89,7 +97,7 @@ services:
     ports:
       - "1234:1234"
 
-  # ─── Chatterbox TTS ──────────────────────────────────────────────────────────
+  # ─── Chatterbox TTS ─────────────────────────────────────────────────────────────
   chatterbox-tts:
     build:
       context: .
