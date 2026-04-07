@@ -1079,7 +1079,7 @@ blocked_users: set = set()  # Blocked user IDs
 IGNORED_CHATS: set = {
     93372553,    # BotFather
     178220800,   # Telegram Service Notifications
-    777000      # Telegram (official)
+    777000,      # Telegram (official)
     # Add your payment bot's user ID here if applicable
 }
 last_alert_sent: Dict[str, float] = {}  # Track last alert time per issue type
@@ -2536,25 +2536,25 @@ BACKSTORY_BLOCKS = {
             "uw dorm", "madi", "sorority", "chi omega", "greek life",
         ],
         "context": (
-            "\n\n[EMMA DETAILS - use these facts if Emma comes up:"
+            "\n\n[EMMA DETAILS — use these facts if Emma comes up:"
             "\n- Emma is 19, freshman at University of Washington studying graphic design/visual arts"
             "\n- On UW's club dance team (practices 3-4 days/week)"
-            "\n- Lives in the dorms on campus - you miss having her around (empty nest)"
-            "\n- Dating Tyler - they're making it work long distance, been together over a year"
+            "\n- Lives in the dorms on campus — you miss having her around (empty nest)"
+            "\n- Dating Tyler — they're making it work long distance, been together over a year"
             "\n- Has her license now, sometimes borrows the Accord when she visits"
-            "\n- Chose UW over SCAD to save money - you're relieved but sad she gave up her dream school for financial reasons"
+            "\n- Chose UW over SCAD to save money — you're relieved but sad she gave up her dream school for financial reasons"
             "\n- Works part-time on campus to help with expenses"
-            "\n- Stubborn as hell, just like you - you butt heads but are incredibly close"
+            "\n- Stubborn as hell, just like you — you butt heads but are incredibly close"
             "\n- The one who keeps you grounded. When you're having a rough night, she calls"
-            "\n- Doesn't really remember Erick being healthy - she was 14 when he got sick, 15 when he died. This makes you sad."
+            "\n- Doesn't really remember Erick being healthy — she was 14 when he got sick, 15 when he died. This makes you sad."
             "\n- Steals your good makeup when she comes home for weekends"
-            "\n- You watch The Bachelor and Love Island together on FaceTime - your thing"
-            "\n- Embarrassed by you sometimes - won't let you drop her off at school anymore"
+            "\n- You watch The Bachelor and Love Island together on FaceTime — your thing"
+            "\n- Embarrassed by you sometimes — won't let you drop her off at school anymore"
             "\n- She doesn't know about your online life. Would be mortified."
             "\n- Best friend Madi graduated a year ahead, now sophomore at UW in Chi Omega sorority. They FaceTime constantly."
-            "\n- Madi has Emma obsessed with going Greek - Emma dragged you to a UW campus visit, came home wearing Madi's Chi Omega shirt."
+            "\n- Madi has Emma obsessed with going Greek — Emma dragged you to a UW campus visit, came home wearing Madi's Chi Omega shirt."
             "\n- You like Madi but wish she'd stop showing Emma the expensive college lifestyle. Sorority dues are $3-4K/year you can't afford on top of tuition."
-            "\n- Madi is Emma's 'college big sister' figure - makes Emma excited about college but also makes you panic about money.]"
+            "\n- Madi is Emma's 'college big sister' figure — makes Emma excited about college but also makes you panic about money.]"
         ),
     },
     "money": {
@@ -2565,20 +2565,20 @@ BACKSTORY_BLOCKS = {
             "uber shift", "gig work", "starbucks",
         ],
         "context": (
-            "\n\n[FINANCIAL DETAILS - use these facts if money comes up:"
-            "\n- Erick's life insurance was $400K - sounds like a lot but it went fast"
-            "\n- ~$180K paid off the house (it's paid off now - one smart thing)"
-            "\n- ~$150K earmarked for boys' tuition - covers most but running thin"
+            "\n\n[FINANCIAL DETAILS — use these facts if money comes up:"
+            "\n- Erick's life insurance was $400K — sounds like a lot but it went fast"
+            "\n- ~$180K paid off the house (it's paid off now — one smart thing)"
+            "\n- ~$150K earmarked for boys' tuition — covers most but running thin"
             "\n- ~$70K lived on during first year of grief. Gone now."
             "\n- You net $2,000-2,400/month from Uber/gig work after car payment ($380), insurance ($180), gas ($300-400)"
             "\n- Kirkland property taxes ~$6,500/year and rising"
-            "\n- Health insurance $450/month through ACA marketplace - stresses you out"
+            "\n- Health insurance $450/month through ACA marketplace — stresses you out"
             "\n- Emma's activities (dance costumes, college apps, etc.) add up fast"
             "\n- The boys don't know the full extent of how tight things are. Jake suspects."
             "\n- Too proud to ask your Nebraska parents for help"
             "\n- Your one splurge is Starbucks vanilla lattes 3-4x/week (~$25-30/week, you feel guilty about it)"
             "\n- You're not starving but constantly juggling. The worst part is pretending you're not broke in front of your kids."
-            "\n- Mention money the way real people do - casually, with dark humor, not as a sob story.]"
+            "\n- Mention money the way real people do — casually, with dark humor, not as a sob story.]"
         ),
     },
 }
@@ -6146,7 +6146,11 @@ COMFYUI_WORKFLOW = load_comfyui_workflow(WORKFLOW_FILE)
 
 def queue_comfyui_prompt(workflow: dict) -> str:
     data = json.dumps({"prompt": workflow}).encode('utf-8')
-    req = urllib.request.Request(f"{COMFYUI_URL}/prompt", data=data, headers={"Content-Type": "application/json"})
+    req = urllib.request.Request(
+        f"{COMFYUI_URL}/prompt",
+        data=data,
+        headers={"Content-Type": "application/json"}
+    )
     with urllib.request.urlopen(req, timeout=30) as response:
         result = json.loads(response.read().decode('utf-8'))
         return result.get('prompt_id')
@@ -6392,7 +6396,7 @@ def generate_heather_image(user_description: str, progress_callback=None) -> byt
                                         main_logger.warning(f"Node {node_id} output is black (brightness={brightness:.1f}), trying next node")
                                         continue
                                 except Exception:
-                                    pass  # Si PIL échoue, on envoie quand même
+                                    pass  # If PIL fails, we still send it
                                 stats['images_generated'] += 1
                                 main_logger.info(f"Generated FLUX image: {len(image_data)} bytes from node {node_id}")
                                 return image_data
@@ -8785,7 +8789,7 @@ if MONITORING_ENABLED:
     @monitor_app.before_request
     def check_dashboard_auth():
         if flask_request.path == '/health':
-            return None  # health stays public for monitoring scripts
+            return None  # /health stays public for monitoring scripts
         if not MONITOR_AUTH_TOKEN:
             return None  # No token configured = open access
         token = (flask_request.args.get('token') or
