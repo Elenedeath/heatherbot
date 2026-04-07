@@ -323,7 +323,7 @@
   },
   "26": {
     "inputs": {
-      "image": "your_face.png"
+      "image": "heather_face.png"
     },
     "class_type": "LoadImage",
     "_meta": {
