@@ -4,9 +4,12 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt && \
-    rm -rf /root/.cache/pip /tmp/* /var/lib/apt/lists/*
+    rm -rf /root/.cache/pip /tmp/*
+
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 
 COPY . .
+RUN chmod +x /app/wait-for-llama.sh
 
 EXPOSE 8888
-CMD ["python", "heather_telegram_bot.py"]
+CMD ["sh", "/app/wait-for-llama.sh"]

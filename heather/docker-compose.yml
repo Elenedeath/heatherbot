@@ -1,3 +1,10 @@
+x-hf-env: &hf-env
+  # ── HuggingFace Token ───────────────────────────────────────────────────────────
+  # token free on huggingface.co/settings/tokens
+  # edit this one to use HF_TOKEN in all compose
+  # ────────────────────────────────────────────────────────────────────────────────
+  HF_TOKEN: CHANGE_ME
+
 services:
   # ─── Heather Bot ─────────────────────────────────────────────────────────────-──
   heather:
@@ -10,92 +17,117 @@ services:
       - llama-server
       - chatterbox-tts
     environment:
+      # DONT TOUCH THAT IT'S YOUR HF_TOKEN SET ON TOP OF THE SCRIPT
+      <<: *hf-env
+
       # ── Telegram Configuration ──────────────────────────────────────────────────
       # Telegram credentials (from https://my.telegram.org)
-      - TELEGRAM_API_ID=CHANGE_ME
-      - TELEGRAM_API_HASH=CHANGE_ME
+      TELEGRAM_API_ID: "CHANGE_ME"
+      TELEGRAM_API_HASH: "CHANGE_ME"
 
       # Admin Telegram user ID (your personal account numeric ID)
-      - ADMIN_USER_ID=CHANGE_ME
+      ADMIN_USER_ID: "CHANGE_ME"
 
       # Telethon Imports
-      - SESSION_NAME=/app/sessions/heather_session
+      SESSION_NAME: "/app/sessions/heather_session"
 
       # ── Payment bot Configuration ───────────────────────────────────────────────
       # Payment bot token (from @BotFather — optional, for Telegram Stars tipping)
-      - PAYMENT_BOT_TOKEN=CHANGE_ME
+      PAYMENT_BOT_TOKEN: "CHANGE_ME"
 
       # Payment bot @username (no @ prefix) — used in tip messages
-      - PAYMENT_BOT_USERNAME=CHANGE_ME
+      PAYMENT_BOT_USERNAME: "CHANGE_ME"
+
+      # ── Models Configuration ────────────────────────────────────────────────
+      # if true 12B SMALL else 70B FULL
+      SMALL_MODEL_MODE: "true"
 
       # ── Monitoring Configuration ────────────────────────────────────────────────
-      - MONITORING_ENABLED=true
-      - MONITORING_HOST=0.0.0.0
-      - MONITORING_PORT=8888
+      MONITORING_ENABLED: "true"
+      MONITORING_HOST: "0.0.0.0"
+      MONITORING_PORT: "8888"
       # Monitoring dashboard auth key (leave empty for open access on localhost)
       # don't use & on your token or you will never access it
-      - MONITOR_AUTH_TOKEN=CHANGE_ME
-
-      # ── HuggingFace Token ───────────────────────────────────────────────────────
-      - HF_TOKEN=CHANGE_ME  # token free on huggingface.co/settings/tokens
+      MONITOR_AUTH_TOKEN: "CHANGE_ME"
 
       # ── Text Services ───────────────────────────────────────────────────────────
-      - TEXT_HOST=llama-server
-      - TEXT_PORT=1234
+      TEXT_HOST: "llama-server"
+      TEXT_PORT: "1234"
       
       # ── TTS Services ────────────────────────────────────────────────────────────
-      - TTS_HOST=chatterbox-tts
-      - TTS_PORT=5001
-      - TTS_TIMEOUT=120
+      TTS_HOST: "chatterbox-tts"
+      TTS_PORT: "5001"
+      TTS_TIMEOUT: "120"
 
       # ── Ollama Services ─────────────────────────────────────────────────────────
-      - IMAGE_HOST=192.168.2.47
-      - IMAGE_PORT=11434
-      - AI_TIMEOUT=120
+      IMAGE_HOST: "192.168.2.10"
+      IMAGE_PORT: "30068"
+      AI_TIMEOUT: "120"
 
       # ── Comfyui Configuration ───────────────────────────────────────────────────
-      - COMFYUI_HOST=192.168.2.10
-      - COMFYUI_PORT=8188
-      - COMFYUI_TIMEOUT=300
-      - UNFILTERED_MODE=true
-      - ALERT_COOLDOWN_SECONDS=300
-      - WORKFLOW_FILE=/app/workflow_flux.json
-      - FINAL_OUTPUT_NODE=9
+      COMFYUI_HOST: "192.168.2.10"
+      COMFYUI_PORT: "8188"
+      COMFYUI_TIMEOUT: "300"
+      UNFILTERED_MODE: "true"
+      ALERT_COOLDOWN_SECONDS: "300"
+      WORKFLOW_FILE: "/data/workflow_flux.json"
+      FINAL_OUTPUT_NODE: "9"
 
       # ComfyUI face-swap source image path (for image generation)
-      - COMFYUI_FACE_IMAGE=/app/ComfyUI/input/heather_face.png
+      COMFYUI_FACE_IMAGE: "/data/comfyui-input/heather_face.png"
 
     volumes:
-      - ./sessions:/app/sessions
-      - ./logs:/app/logs
-      - ./videos:/app/videos
-      - ./images_db:/app/images_db
-      - ./persona_example.yaml:/app/persona_example.yaml
-      - C:/ComfyUI/ComfyUI/input:/app/ComfyUI/input:ro
+      - /mnt/fast/heatherbot/data/sessions:/app/sessions
+      - /mnt/fast/heatherbot/data/logs:/app/logs
+      - /mnt/fast/heatherbot/data/videos:/app/videos
+      - /mnt/fast/heatherbot/data/images_db:/app/images_db
+      - /mnt/fast/heatherbot/data:/data
     ports:
       - "8888:8888"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
 
   # ─── LLM Backend ────────────────────────────────────────────────────────────────
   llama-server:
     image: ghcr.io/ggml-org/llama.cpp:server-cuda12
     restart: unless-stopped
+    runtime: nvidia
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
-              count: all
+              device_ids: ['1']   # Physical GPU 1 = QUADRO RTX 4000
               capabilities: [gpu]
+    environment:
+      - CUDA_VISIBLE_DEVICES=0   # Quadro RTX 4000 (idx 1 → remapped to 0 in the container)
     volumes:
-      - C:/llama-cpp/models:/models:ro
-    command: >
-      --model /models/mradermacher_dolphin-2.9.3-mistral-nemo-12b-Q4_K_M.gguf
+      - /mnt/fast/heatherbot/models:/models:ro
+    command: >-
+      --model /models/dphn_dolphin-2.9.3-mistral-nemo-12b.Q4_K_M.gguf
       --host 0.0.0.0
       --port 1234
-      --n-gpu-layers 99
-      --ctx-size 4096
+      --n-gpu-layers 35
+      --ctx-size 6144
+      --flash-attn on
+      --cache-type-k q8_0
+      --parallel 1
     ports:
       - "1234:1234"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:1234/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
 
   # ─── Chatterbox TTS ─────────────────────────────────────────────────────────────
   chatterbox-tts:
@@ -103,19 +135,24 @@ services:
       context: .
       dockerfile: Dockerfile.tts
     restart: unless-stopped
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
     environment:
-      - HF_TOKEN=CHANGE_ME  # token free on huggingface.co/settings/tokens
+      # DONT TOUCH THAT IT'S YOUR HF_TOKEN SET ON TOP OF THE SCRIPT
+      <<: *hf-env
     volumes:
       - chatterbox-cache:/root/.cache/huggingface
     ports:
       - "5001:5001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
 
 networks:
   default:

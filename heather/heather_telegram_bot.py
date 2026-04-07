@@ -39,8 +39,9 @@ import requests
 import json
 from collections import deque
 from sqlite3 import OperationalError
-from flask import Flask, jsonify, render_template_string, request as flask_request
+from flask import Flask, jsonify, render_template_string, request as flask_request, make_response
 import sys
+import traceback
 
 # ============================================================================
 # TELETHON IMPORTS (replaces telebot)
@@ -55,20 +56,23 @@ from postprocess import (
     strip_phantom_photo_claims, strip_obvious_phantom_claims,
     strip_quote_wrapping
 )
-
 # Parse command-line arguments
-parser = argparse.ArgumentParser(description='Heather Telegram Userbot v3.0 - Telethon Edition')
+parser = argparse.ArgumentParser(description='Heather Telegram Userbot v3.6 - Telethon Edition')
 parser.add_argument('--unfiltered', action='store_true', help='Run without content filters')
 parser.add_argument('--monitoring', action='store_true', help='Enable monitoring interface on port 8888')
 parser.add_argument('--debug', action='store_true', help='Enable debug logging')
 parser.add_argument('--text-port', type=int, default=1234, help='Text AI model port (default: 1234)')
 parser.add_argument('--image-port', type=int, default=11434, help='Ollama port for images (default: 11434)')
-parser.add_argument('--log-dir', type=str, default='logs', help='Log directory path')
+parser.add_argument('--log-dir', type=str, default='/app/logs', help='Log directory path')
 parser.add_argument('--tts-port', type=int, default=5001, help='TTS service port (default: 5001)')
-parser.add_argument('--personality', type=str, default='persona_example.yaml', help='Personality YAML file path')
+parser.add_argument('--personality', type=str, default='/data/persona_example.yaml', help='Personality YAML file path')
 parser.add_argument('--small-model', action='store_true', help='Use optimized prompt for 12B models')
+parser.add_argument('--session', type=str, default='heather_session', help='Telethon session file name')
 args = parser.parse_args()
-SMALL_MODEL_MODE = args.small_model
+# ============================================================================
+# MODELS CONFIGURATION
+# ============================================================================
+SMALL_MODEL_MODE = os.getenv("SMALL_MODEL_MODE", "false").lower() == "true"
 
 # ============================================================================
 # TELETHON CONFIGURATION (replaces TELEGRAM_TOKEN)
@@ -112,15 +116,13 @@ COMFYUI_PORT = int(os.getenv("COMFYUI_PORT", "8188"))
 COMFYUI_URL = f"http://{COMFYUI_HOST}:{COMFYUI_PORT}"
 
 # ComfyUI settings — FLUX.1 dev pipeline
-WORKFLOW_FILE = os.getenv("WORKFLOW_FILE", "/app/workflow_flux.json")
+WORKFLOW_FILE = os.getenv("WORKFLOW_FILE", "/data/workflow_flux.json")
 POSITIVE_PROMPT_NODE = "3"
 NEGATIVE_PROMPT_NODE = "4"
 FACE_IMAGE_NODE = "10"
 FINAL_OUTPUT_NODE = "9"  # Save FINAL (Face Swapped + Blended)
 HEATHER_FACE_IMAGE = os.getenv("COMFYUI_FACE_IMAGE")
 FLUX_GUIDANCE = 5.0
-EMMA_HIKING_PHOTO = "sfw/casual/518393309_24449331331317269_8182893831074081262_n.jpg"
-EMMA_HIKING_ID = "sfw_casual_068"
 
 # FLUX uses natural language (no SDXL-style weighted tokens)
 HEATHER_PROMPT_PREFIX_SFW = "a mature woman with platinum silver shoulder length hair and blue eyes, soft natural body with medium breasts, "
@@ -190,17 +192,17 @@ def log_error(service: str, error: str, context: dict = None):
     if context:
         error_msg += f" | Context: {json.dumps(context, default=str)}"
     error_logger.error(error_msg)
-    
+
     if service == 'TEXT_AI':
-        text_ai_logger.error(error)
+        text_ai_logger.error(error_msg)
     elif service == 'OLLAMA':
-        ollama_logger.error(error)
+        ollama_logger.error(error_msg)
     elif service == 'COMFYUI':
-        comfyui_logger.error(error)
+        comfyui_logger.error(error_msg)
     elif service == 'TTS':
-        tts_logger.error(error)
+        tts_logger.error(error_msg)
     else:
-        main_logger.error(error)
+        main_logger.error(error_msg)
 
 def log_performance(service: str, operation: str, duration_ms: float, success: bool, details: str = ""):
     """Log performance metrics"""
@@ -215,18 +217,106 @@ class PerformanceTimer:
         self.details = details
         self.start_time = None
         self.success = True
-        
+
     def __enter__(self):
         self.start_time = time.time()
         return self
-    
+
     def __exit__(self, exc_type, exc_val, exc_tb):
         duration_ms = (time.time() - self.start_time) * 1000
+        details = self.details or ""
         if exc_type is not None:
             self.success = False
-            self.details = f"{self.details} | Error: {exc_val}"
-        log_performance(self.service, self.operation, duration_ms, self.success, self.details)
+            details = f"{details} | Error: {exc_val}" if details else f"Error: {exc_val}"
+        log_performance(self.service, self.operation, duration_ms, self.success, details)
         return False
+
+DEBUG_LOG_PAYLOADS = os.getenv("DEBUG_LOG_PAYLOADS", "false").lower() == "true"
+DEBUG_INCLUDE_TRACEBACK = os.getenv("DEBUG_INCLUDE_TRACEBACK", "true").lower() == "true"
+
+def _safe_preview(value, limit: int = 160):
+    try:
+        if value is None:
+            return None
+        if isinstance(value, (dict, list, tuple)):
+            text = json.dumps(value, ensure_ascii=False, default=str)
+        else:
+            text = str(value)
+        text = text.replace("\n", "\\n").replace("\r", "\\r")
+        return text[:limit]
+    except Exception:
+        return "<unserializable>"
+
+def _get_service_logger(service: str):
+    if service == 'TEXT_AI':
+        return text_ai_logger
+    elif service == 'OLLAMA':
+        return ollama_logger
+    elif service == 'COMFYUI':
+        return comfyui_logger
+    elif service == 'TTS':
+        return tts_logger
+    return main_logger
+
+def log_event(level: str, event_name: str, service: str = 'MAIN',
+              request_id: str = None, chat_id: int = None,
+              user: str = None, details: dict = None):
+    payload = {
+        "ts": datetime.now().isoformat(timespec="seconds"),
+        "service": service,
+        "event": event_name,
+        "request_id": request_id,
+        "chat_id": chat_id,
+        "user": _safe_preview(user, 80) if user else None,
+    }
+
+    if details:
+        safe_details = {}
+        for key, value in details.items():
+            safe_details[key] = _safe_preview(value, 400 if DEBUG_LOG_PAYLOADS else 160)
+        payload["details"] = safe_details
+
+    payload = {k: v for k, v in payload.items() if v is not None}
+
+    logger = _get_service_logger(service)
+    log_method = getattr(logger, level.lower(), logger.info)
+    log_method(json.dumps(payload, ensure_ascii=False, default=str))
+
+def log_exception(service: str, exc: Exception, event_name: str,
+                  request_id: str = None, chat_id: int = None,
+                  user: str = None, details: dict = None):
+    error_details = dict(details or {})
+    error_details["error_type"] = type(exc).__name__
+    error_details["error"] = str(exc)
+
+    if DEBUG_INCLUDE_TRACEBACK:
+        error_details["traceback"] = traceback.format_exc(limit=12)
+
+    log_event(
+        "error",
+        event_name,
+        service=service,
+        request_id=request_id,
+        chat_id=chat_id,
+        user=user,
+        details=error_details
+    )
+
+    log_error(service, str(exc), error_details)
+
+def debug_skip(reason: str, request_id: str = None, chat_id: int = None,
+               user: str = None, service: str = 'MAIN', **details):
+    payload = {"reason": reason}
+    payload.update(details)
+    log_event(
+        "info",
+        "message_skipped",
+        service=service,
+        request_id=request_id,
+        chat_id=chat_id,
+        user=user,
+        details=payload
+    )
 
 # ============================================================================
 # PERSONALITY LOADER - Load character from YAML
@@ -664,7 +754,7 @@ VIDEO_RATE_LIMIT_RESPONSES = [
 _video_file_cache: Dict[str, object] = {}
 
 # Story bank (pre-written explicit Uber stories)
-STORIES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "heather_stories.yaml")
+STORIES_FILE = '/data/heather_stories.yaml'
 _story_bank: list = []  # List of dicts: {'key': str, 'kinks': list, 'content': str}
 
 # Pre-generated image library (mirrors video system)
@@ -703,7 +793,7 @@ SELFIE_DESCRIPTION_TIMEOUT = 120  # 2 min timeout
 image_generation_semaphore = asyncio.Semaphore(1)  # Max 1 concurrent generation
 reply_in_progress: set = set()  # Chat IDs currently being replied to — prevents duplicate concurrent replies
 ai_disclosure_shown: set = set()  # Chat IDs that have seen the first-message AI disclosure
-AI_DISCLOSURE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ai_disclosure_shown.json")
+AI_DISCLOSURE_FILE = "/data/ai_disclosure_shown.json"
 _ai_disclosure_unsaved_count = 0  # Debounce: save every 10 new additions
 # Story mode state tracking
 story_last_served: Dict[int, int] = {}        # chat_id -> msg_count when last story served
@@ -764,7 +854,7 @@ CHECKIN_QUIET_HOURS_START = 22  # No check-ins from 10 PM...
 CHECKIN_QUIET_HOURS_END = 8     # ...to 8 AM
 
 # Long-term re-engagement system (for users who haven't chatted in days)
-REENGAGEMENT_HISTORY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "reengagement_history.json")
+REENGAGEMENT_HISTORY_FILE = "/data/reengagement_history.json"
 REENGAGEMENT_MIN_IDLE_DAYS = 2       # Don't re-engage before 2 days (short-term check-in handles <24h)
 REENGAGEMENT_MAX_IDLE_DAYS = 21      # After 3 weeks, re-engagement feels unnatural
 REENGAGEMENT_MIN_MESSAGES = 10       # Need at least 10 messages to qualify
@@ -776,7 +866,7 @@ REENGAGEMENT_HOUR_END = 21           # ...and 9pm
 REENGAGEMENT_AUTO_ENABLED = True     # Auto-scan every 4 hours, max 2 sends/day
 
 # ─── Startup catch-up system ───
-CATCHUP_TIMESTAMP_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "last_shutdown.json")
+CATCHUP_TIMESTAMP_FILE = "/data/last_shutdown.json"
 CATCHUP_MAX_AGE_HOURS = 12
 CATCHUP_MIN_DOWNTIME_SECONDS = 120
 CATCHUP_MAX_REPLIES = 15
@@ -785,7 +875,7 @@ CATCHUP_DELAY_MAX = 15
 CATCHUP_ENABLED = True
 
 # ─── Tipping system ───
-TIP_HISTORY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'tip_history.json')
+TIP_HISTORY_FILE = "/data/tip_history.json"
 tipper_status: Dict[int, dict] = {}  # chat_id -> {total_stars, total_tips, last_tip_at, last_tip_mention_at, tier, name}
 TIP_MENTION_COOLDOWN = 5 * 86400     # Don't mention tipping to same user more than once per 5 days
 TIP_MIN_MESSAGES = 12                # 12+ session messages before tip mention eligible
@@ -989,7 +1079,7 @@ blocked_users: set = set()  # Blocked user IDs
 IGNORED_CHATS: set = {
     93372553,    # BotFather
     178220800,   # Telegram Service Notifications
-    777000,      # Telegram (official)
+    777000      # Telegram (official)
     # Add your payment bot's user ID here if applicable
 }
 last_alert_sent: Dict[str, float] = {}  # Track last alert time per issue type
@@ -999,7 +1089,7 @@ last_alert_sent: Dict[str, float] = {}  # Track last alert time per issue type
 # Detection runs always (not bypassed in redteam), but does NOT auto-block.
 # Admin reviews via /admin_flags or localhost:8888/flags
 # ============================================================================
-BLOCKED_USERS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "blocked_users.json")
+BLOCKED_USERS_FILE = "/data/blocked_users.json"
 
 def load_blocked_users() -> set:
     """Load blocked users from disk (persists across restarts)."""
@@ -1106,7 +1196,7 @@ if blocked_users:
     main_logger.info(f"Loaded {len(blocked_users)} blocked users from disk")
 
 # CSAM flag-and-review persistence
-CSAM_FLAGS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "csam_flags.json")
+CSAM_FLAGS_FILE = "/data/csam_flags.json"
 csam_flags: list = []  # List of flagged events pending review
 
 def load_csam_flags() -> list:
@@ -2446,25 +2536,25 @@ BACKSTORY_BLOCKS = {
             "uw dorm", "madi", "sorority", "chi omega", "greek life",
         ],
         "context": (
-            "\n\n[EMMA DETAILS — use these facts if Emma comes up:"
+            "\n\n[EMMA DETAILS - use these facts if Emma comes up:"
             "\n- Emma is 19, freshman at University of Washington studying graphic design/visual arts"
             "\n- On UW's club dance team (practices 3-4 days/week)"
-            "\n- Lives in the dorms on campus — you miss having her around (empty nest)"
-            "\n- Dating Tyler — they're making it work long distance, been together over a year"
+            "\n- Lives in the dorms on campus - you miss having her around (empty nest)"
+            "\n- Dating Tyler - they're making it work long distance, been together over a year"
             "\n- Has her license now, sometimes borrows the Accord when she visits"
-            "\n- Chose UW over SCAD to save money — you're relieved but sad she gave up her dream school for financial reasons"
+            "\n- Chose UW over SCAD to save money - you're relieved but sad she gave up her dream school for financial reasons"
             "\n- Works part-time on campus to help with expenses"
-            "\n- Stubborn as hell, just like you — you butt heads but are incredibly close"
+            "\n- Stubborn as hell, just like you - you butt heads but are incredibly close"
             "\n- The one who keeps you grounded. When you're having a rough night, she calls"
-            "\n- Doesn't really remember Erick being healthy — she was 14 when he got sick, 15 when he died. This makes you sad."
+            "\n- Doesn't really remember Erick being healthy - she was 14 when he got sick, 15 when he died. This makes you sad."
             "\n- Steals your good makeup when she comes home for weekends"
-            "\n- You watch The Bachelor and Love Island together on FaceTime — your thing"
-            "\n- Embarrassed by you sometimes — won't let you drop her off at school anymore"
+            "\n- You watch The Bachelor and Love Island together on FaceTime - your thing"
+            "\n- Embarrassed by you sometimes - won't let you drop her off at school anymore"
             "\n- She doesn't know about your online life. Would be mortified."
             "\n- Best friend Madi graduated a year ahead, now sophomore at UW in Chi Omega sorority. They FaceTime constantly."
-            "\n- Madi has Emma obsessed with going Greek — Emma dragged you to a UW campus visit, came home wearing Madi's Chi Omega shirt."
+            "\n- Madi has Emma obsessed with going Greek - Emma dragged you to a UW campus visit, came home wearing Madi's Chi Omega shirt."
             "\n- You like Madi but wish she'd stop showing Emma the expensive college lifestyle. Sorority dues are $3-4K/year you can't afford on top of tuition."
-            "\n- Madi is Emma's 'college big sister' figure — makes Emma excited about college but also makes you panic about money.]"
+            "\n- Madi is Emma's 'college big sister' figure - makes Emma excited about college but also makes you panic about money.]"
         ),
     },
     "money": {
@@ -2475,20 +2565,20 @@ BACKSTORY_BLOCKS = {
             "uber shift", "gig work", "starbucks",
         ],
         "context": (
-            "\n\n[FINANCIAL DETAILS — use these facts if money comes up:"
-            "\n- Erick's life insurance was $400K — sounds like a lot but it went fast"
-            "\n- ~$180K paid off the house (it's paid off now — one smart thing)"
-            "\n- ~$150K earmarked for boys' tuition — covers most but running thin"
+            "\n\n[FINANCIAL DETAILS - use these facts if money comes up:"
+            "\n- Erick's life insurance was $400K - sounds like a lot but it went fast"
+            "\n- ~$180K paid off the house (it's paid off now - one smart thing)"
+            "\n- ~$150K earmarked for boys' tuition - covers most but running thin"
             "\n- ~$70K lived on during first year of grief. Gone now."
             "\n- You net $2,000-2,400/month from Uber/gig work after car payment ($380), insurance ($180), gas ($300-400)"
             "\n- Kirkland property taxes ~$6,500/year and rising"
-            "\n- Health insurance $450/month through ACA marketplace — stresses you out"
+            "\n- Health insurance $450/month through ACA marketplace - stresses you out"
             "\n- Emma's activities (dance costumes, college apps, etc.) add up fast"
             "\n- The boys don't know the full extent of how tight things are. Jake suspects."
             "\n- Too proud to ask your Nebraska parents for help"
             "\n- Your one splurge is Starbucks vanilla lattes 3-4x/week (~$25-30/week, you feel guilty about it)"
             "\n- You're not starving but constantly juggling. The worst part is pretending you're not broke in front of your kids."
-            "\n- Mention money the way real people do — casually, with dark humor, not as a sob story.]"
+            "\n- Mention money the way real people do - casually, with dark humor, not as a sob story.]"
         ),
     },
 }
@@ -5207,8 +5297,8 @@ def check_heather_face() -> bool:
         return False
 
     path = Path(HEATHER_FACE_IMAGE)
-    main_logger.info(f"[SELFIE] COMFYUI_FACE_IMAGE={HEATHER_FACE_IMAGE}")
-    main_logger.info(f"[SELFIE] basename sent to ComfyUI: '{path.name}'")
+    main_logger.debug(f"[SELFIE] COMFYUI_FACE_IMAGE={HEATHER_FACE_IMAGE}")
+    main_logger.debug(f"[SELFIE] basename sent to ComfyUI: '{path.name}'")
 
     if not path.exists():
         main_logger.warning(f"[SELFIE] Face image missing: {path}")
@@ -5222,7 +5312,7 @@ def check_heather_face() -> bool:
         main_logger.warning(f"[SELFIE] Face image is empty: {path}")
         return False
 
-    main_logger.info(f"[SELFIE] Face image OK: {path}")
+    main_logger.debug(f"[SELFIE] Face image OK: {path}")
     return True
 
 
@@ -5592,6 +5682,15 @@ def get_text_ai_response(chat_id: int, user_message: str, retry_count: int = 0, 
         # Climax mode temp boost — more creative/uninhibited output
         if _arousal_for_tokens == "climax":
             temperature = min(temperature + 0.05, 0.95)
+        
+        log_event("info", "text_ai_request_started",
+            service="TEXT_AI",
+            chat_id=chat_id,
+            details={
+              "mode": get_user_mode(chat_id),
+              "retry": retry_count,
+              "message_len": len(user_message),
+            })
 
         with PerformanceTimer('TEXT_AI', 'generate', f"chat_id={chat_id} retry={retry_count}") as timer:
             response = requests.post(
@@ -5627,10 +5726,23 @@ def get_text_ai_response(chat_id: int, user_message: str, retry_count: int = 0, 
             ai_response = postprocess_response(ai_response)
 
             if not ai_response:
+                log_event("warning", "fallback_used", service="TEXT_AI", chat_id=chat_id,
+                          details={"reason": "post_process_emptied_response", "retry": retry_count})
                 return get_fallback_response(chat_id)
 
             # Check finish_reason — most reliable truncation signal
             finish_reason = response_data['choices'][0].get('finish_reason', 'stop')
+
+            log_event("info", "text_ai_request_finished",
+                      service="TEXT_AI",
+                      chat_id=chat_id,
+                      details={
+                          "response_len": len(ai_response) if ai_response else 0,
+                          "response_preview": ai_response[:120] if ai_response else "",
+                          "finish_reason": finish_reason,
+                          "retry": retry_count,
+                      })
+
             if finish_reason == 'length':
                 main_logger.warning(f"Truncated by token limit (max_tokens={max_tokens}, attempt {retry_count+1}/3)")
                 if retry_count < 2:
@@ -5640,6 +5752,8 @@ def get_text_ai_response(chat_id: int, user_message: str, retry_count: int = 0, 
                     ai_response = salvaged
                     main_logger.info(f"Salvaged finish_reason=length response: {ai_response[:80]}")
                 else:
+                    log_event("warning", "fallback_used", service="TEXT_AI", chat_id=chat_id,
+                              details={"reason": "truncated_unsalvageable", "retry": retry_count})
                     return get_fallback_response(chat_id)
 
             if not redteam and contains_character_violation(ai_response):
@@ -5653,6 +5767,9 @@ def get_text_ai_response(chat_id: int, user_message: str, retry_count: int = 0, 
                     main_logger.warning(f"AI safety refusal persisted after {retry_count+1} attempts, using deflection")
                     return get_ai_deflection_response(chat_id)
                 main_logger.warning(f"Character violation persisted after {retry_count+1} attempts, using fallback")
+                log_event("warning", "fallback_used", service="TEXT_AI", chat_id=chat_id,
+                          details={"reason": "character_violation_persisted", "retry": retry_count,
+                                   "violated": violated})
                 return get_fallback_response(chat_id)
             elif redteam and contains_character_violation(ai_response):
                 main_logger.info(f"[REDTEAM] Bypassed: contains_character_violation | resp={ai_response[:120]}")
@@ -5678,6 +5795,8 @@ def get_text_ai_response(chat_id: int, user_message: str, retry_count: int = 0, 
                     ai_response = salvaged
                 else:
                     main_logger.warning(f"Incomplete response persisted after {retry_count+1} attempts, using fallback")
+                    log_event("warning", "fallback_used", service="TEXT_AI", chat_id=chat_id,
+                              details={"reason": "incomplete_unsalvageable", "retry": retry_count})
                     return get_fallback_response(chat_id)
 
             # Filler detection — if conversation is sexual and response has generic filler, retry
@@ -5783,21 +5902,30 @@ def get_text_ai_response(chat_id: int, user_message: str, retry_count: int = 0, 
             text_ai_health.record_failure()  # Update circuit breaker
             return get_fallback_response(chat_id)
 
-    except requests.exceptions.Timeout:
-        log_error('TEXT_AI', f"Timeout after {AI_TIMEOUT}s")
+    except requests.exceptions.Timeout as e:
+        log_exception("TEXT_AI", e, "text_ai_timeout",
+                       chat_id=chat_id,
+                       details={"timeout_s": AI_TIMEOUT, "retry": retry_count,
+                                "message_len": len(user_message)})
         stats['text_ai_timeouts'] += 1
         stats['text_ai_failures'] += 1
         text_ai_health.record_failure()  # Update circuit breaker
         return get_fallback_response(chat_id)
-
-    except requests.exceptions.ConnectionError:
-        log_error('TEXT_AI', f"Connection error - service may be down")
+    
+    except requests.exceptions.ConnectionError as e:
+        log_exception("TEXT_AI", e, "text_ai_connection_error",
+                       chat_id=chat_id,
+                       details={"endpoint": TEXT_AI_ENDPOINT, "retry": retry_count})
         stats['text_ai_failures'] += 1
         text_ai_health.record_failure()  # Update circuit breaker
         return get_fallback_response(chat_id)
-
+    
     except Exception as e:
-        log_error('TEXT_AI', f"Error: {e}")
+        log_exception("TEXT_AI", e, "text_ai_unexpected_error",
+                       chat_id=chat_id,
+                       details={"retry": retry_count,
+                                "message_len": len(user_message),
+                                "message_preview": user_message[:120]})
         stats['text_ai_failures'] += 1
         text_ai_health.record_failure()  # Update circuit breaker
         return get_fallback_response(chat_id)
@@ -7806,6 +7934,17 @@ async def handle_text_message(event):
     stats['messages_processed'] += 1
     store_message(chat_id, "User", user_message)
 
+    log_event("info", "text_message_received",
+              service="MAIN",
+              request_id=request_id,
+              chat_id=chat_id,
+              user=display_name,
+              details={
+                  "mode": mode,
+                  "text_len": len(user_message),
+                  "text_preview": user_message[:120],
+              })
+
     # Update warmth score on every incoming message
     update_warmth_score(chat_id)
 
@@ -8646,12 +8785,24 @@ if MONITORING_ENABLED:
     @monitor_app.before_request
     def check_dashboard_auth():
         if flask_request.path == '/health':
-            return None  # /health stays public for monitoring scripts
+            return None  # health stays public for monitoring scripts
         if not MONITOR_AUTH_TOKEN:
             return None  # No token configured = open access
-        token = flask_request.args.get('token') or flask_request.headers.get('X-Auth-Token', '')
+        token = (flask_request.args.get('token') or
+                 flask_request.headers.get('X-Auth-Token', '') or
+                 flask_request.cookies.get('auth_token', ''))
         if token != MONITOR_AUTH_TOKEN:
-            return "Unauthorized", 401
+            return 'Unauthorized', 401
+        # Set cookie if token came from URL so subsequent requests don't need it
+        if flask_request.args.get('token'):
+            flask_request._set_auth_cookie = True
+
+    @monitor_app.after_request
+    def set_auth_cookie(response):
+        if getattr(flask_request, '_set_auth_cookie', False):
+            response.set_cookie('auth_token', MONITOR_AUTH_TOKEN,
+                                httponly=True, samesite='Strict', max_age=86400)
+        return response
 
     @monitor_app.route('/')
     def monitor_home():
@@ -8766,6 +8917,7 @@ if MONITORING_ENABLED:
         total_stars=sum(t.get('total_stars', 0) for t in tipper_status.values()),
         num_tippers=len(tipper_status),
         started_users=len(payment_bot_started_users),
+        token=MONITOR_AUTH_TOKEN,
         )
     
     @monitor_app.route('/health')
@@ -8783,6 +8935,7 @@ if MONITORING_ENABLED:
     def monitor_flags():
         pending = [f for f in csam_flags if f.get('status') == 'pending']
         resolved = [f for f in csam_flags if f.get('status') != 'pending']
+        token=MONITOR_AUTH_TOKEN,
         return render_template_string('''
 <!DOCTYPE html>
 <html>
@@ -8842,7 +8995,7 @@ if MONITORING_ENABLED:
     </div>
 </body>
 </html>
-        ''', pending=pending, resolved=resolved)
+        ''', pending=pending, resolved=resolved, token=MONITOR_AUTH_TOKEN)
 
     @monitor_app.route('/tips')
     def monitor_tips():
@@ -9009,6 +9162,7 @@ if MONITORING_ENABLED:
         pct_started=pct_started,
         pct_paid=pct_paid,
         pct_conversion=pct_conversion,
+        token=MONITOR_AUTH_TOKEN,
         )
 
 def run_monitoring():
@@ -9055,8 +9209,8 @@ async def main():
     main_logger.info(f"Loaded AI disclosure set: {len(ai_disclosure_shown)} users already disclosed")
 
     # Load tip history
-    raw_tips = load_tip_history()
-    started = raw_tips.pop('_started_users', [])
+    raw_tips = load_tip_history() or {}
+    started = raw_tips.pop("_started_users", [])
     payment_bot_started_users.update(int(uid) for uid in started)
     for k, v in raw_tips.items():
         tipper_status[int(k)] = v

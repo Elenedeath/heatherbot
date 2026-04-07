@@ -34,51 +34,9 @@
       "title": "CLIP Text Encode (Prompt) (Negative)"
     }
   },
-  "33": {
-    "inputs": {
-      "preset": "FACEID PLUS V2",
-      "lora_strength": 0.75,
-      "provider": "CUDA",
-      "model": [
-        "1",
-        0
-      ]
-    },
-    "class_type": "IPAdapterUnifiedLoaderFaceID",
-    "_meta": {
-      "title": "IPAdapter FaceID Loader"
-    }
-  },
-  "34": {
-    "inputs": {
-      "weight": 0.25,
-      "weight_faceidv2": 0.5,
-      "weight_type": "linear",
-      "combine_embeds": "concat",
-      "start_at": 0.0,
-      "end_at": 0.3,
-      "embeds_scaling": "V only",
-      "model": [
-        "33",
-        0
-      ],
-      "ipadapter": [
-        "33",
-        1
-      ],
-      "image": [
-        "26",
-        0
-      ]
-    },
-    "class_type": "IPAdapterFaceID",
-    "_meta": {
-      "title": "IPAdapter FaceID Apply"
-    }
-  },
   "5": {
     "inputs": {
-      "seed": 1038167537894106,
+      "seed": 274563244092225,
       "steps": 15,
       "cfg": 1.5,
       "sampler_name": "euler",
@@ -150,7 +108,7 @@
     "inputs": {
       "filename_prefix": "ComfyUI_FaceSwap",
       "images": [
-        "43",
+        "31",
         0
       ]
     },
@@ -251,63 +209,6 @@
     "class_type": "VAEDecode",
     "_meta": {
       "title": "VAE Decode"
-    }
-  },
-  "35": {
-    "inputs": {
-      "lora_name": "LLabiav3.1.safetensors",
-      "strength_model": 0.7,
-      "strength_clip": 0.7,
-      "model": [
-        "1",
-        0
-      ],
-      "clip": [
-        "1",
-        1
-      ]
-    },
-    "class_type": "LoraLoader",
-    "_meta": {
-      "title": "Load LoRA (Large Labia SDXL)"
-    }
-  },
-  "36": {
-    "inputs": {
-      "lora_name": "Detailed_nipples_xl.safetensors",
-      "strength_model": 0.7,
-      "strength_clip": 0.7,
-      "model": [
-        "35",
-        0
-      ],
-      "clip": [
-        "35",
-        1
-      ]
-    },
-    "class_type": "LoraLoader",
-    "_meta": {
-      "title": "Load LoRA (Detailed Nipples XL)"
-    }
-  },
-  "37": {
-    "inputs": {
-      "lora_name": "Nipple_Size_Slider_SDXL.safetensors",
-      "strength_model": 0.0,
-      "strength_clip": 0.0,
-      "model": [
-        "36",
-        0
-      ],
-      "clip": [
-        "36",
-        1
-      ]
-    },
-    "class_type": "LoraLoader",
-    "_meta": {
-      "title": "Load LoRA (Nipple Size Slider)"
     }
   },
   "20": {
@@ -432,46 +333,53 @@
       "title": "Save Face Swap (No Blend - Compare)"
     }
   },
-  "38": {
+  "33": {
     "inputs": {
-      "model_name": "bbox/hand_yolov8s.pt"
+      "preset": "FACEID PLUS V2",
+      "lora_strength": 0.75,
+      "provider": "CUDA",
+      "model": [
+        "1",
+        0
+      ]
     },
-    "class_type": "UltralyticsDetectorProvider",
+    "class_type": "IPAdapterUnifiedLoaderFaceID",
     "_meta": {
-      "title": "Hand Detector (YOLO)"
+      "title": "IPAdapter FaceID Loader"
     }
   },
-  "39": {
+  "34": {
     "inputs": {
-      "bbox_detector": [
-        "38",
+      "weight": 0.25,
+      "weight_faceidv2": 0.5,
+      "weight_type": "linear",
+      "combine_embeds": "concat",
+      "start_at": 0,
+      "end_at": 0.3,
+      "embeds_scaling": "V only",
+      "model": [
+        "33",
         0
+      ],
+      "ipadapter": [
+        "33",
+        1
       ],
       "image": [
-        "31",
+        "26",
         0
-      ],
-      "threshold": 0.3,
-      "dilation": 10,
-      "crop_factor": 2.0,
-      "drop_size": 10,
-      "labels": "all"
+      ]
     },
-    "class_type": "BboxDetectorSEGS",
+    "class_type": "IPAdapterFaceID",
     "_meta": {
-      "title": "Detect Hands"
+      "title": "IPAdapter FaceID Apply"
     }
   },
-  "40": {
+  "35": {
     "inputs": {
-      "image": [
-        "31",
-        0
-      ],
-      "segs": [
-        "39",
-        0
-      ],
+      "lora_name": "LLabiav3.1.safetensors",
+      "strength_model": 0.7,
+      "strength_clip": 0.7,
       "model": [
         "1",
         0
@@ -479,117 +387,49 @@
       "clip": [
         "1",
         1
-      ],
-      "vae": [
-        "1",
-        2
-      ],
-      "guide_size": 384,
-      "guide_size_for": true,
-      "max_size": 768,
-      "seed": 987654321,
-      "steps": 12,
-      "cfg": 1.5,
-      "sampler_name": "euler",
-      "scheduler": "sgm_uniform",
-      "positive": [
-        "3",
-        0
-      ],
-      "negative": [
-        "4",
-        0
-      ],
-      "denoise": 0.4,
-      "feather": 5,
-      "noise_mask": true,
-      "force_inpaint": true,
-      "wildcard": "detailed hands, five fingers, perfect hands, natural hand pose",
-      "cycle": 1
+      ]
     },
-    "class_type": "DetailerForEach",
+    "class_type": "LoraLoader",
     "_meta": {
-      "title": "Hand Detailer"
+      "title": "Load LoRA (Large Labia SDXL)"
     }
   },
-  "41": {
+  "36": {
     "inputs": {
-      "model_name": "bbox/nipples_yolov8s.pt"
-    },
-    "class_type": "UltralyticsDetectorProvider",
-    "_meta": {
-      "title": "Nipple Detector (YOLO)"
-    }
-  },
-  "42": {
-    "inputs": {
-      "bbox_detector": [
-        "41",
-        0
-      ],
-      "image": [
-        "40",
-        0
-      ],
-      "threshold": 0.3,
-      "dilation": 10,
-      "crop_factor": 2.0,
-      "drop_size": 10,
-      "labels": "all"
-    },
-    "class_type": "BboxDetectorSEGS",
-    "_meta": {
-      "title": "Detect Nipples"
-    }
-  },
-  "43": {
-    "inputs": {
-      "image": [
-        "40",
-        0
-      ],
-      "segs": [
-        "42",
-        0
-      ],
+      "lora_name": "Detailed_nipples_xl.safetensors",
+      "strength_model": 0.7,
+      "strength_clip": 0.7,
       "model": [
-        "1",
+        "35",
         0
       ],
       "clip": [
-        "1",
+        "35",
         1
-      ],
-      "vae": [
-        "1",
-        2
-      ],
-      "guide_size": 384,
-      "guide_size_for": true,
-      "max_size": 768,
-      "seed": 123456789,
-      "steps": 12,
-      "cfg": 1.5,
-      "sampler_name": "euler",
-      "scheduler": "sgm_uniform",
-      "positive": [
-        "3",
-        0
-      ],
-      "negative": [
-        "4",
-        0
-      ],
-      "denoise": 0.35,
-      "feather": 5,
-      "noise_mask": true,
-      "force_inpaint": true,
-      "wildcard": "natural nipples, realistic areola, smooth round nipple, natural breast",
-      "cycle": 1
+      ]
     },
-    "class_type": "DetailerForEach",
+    "class_type": "LoraLoader",
     "_meta": {
-      "title": "Nipple Detailer"
+      "title": "Load LoRA (Detailed Nipples XL)"
+    }
+  },
+  "37": {
+    "inputs": {
+      "lora_name": "Nipple_Size_Slider_SDXL.safetensors",
+      "strength_model": 0,
+      "strength_clip": 0,
+      "model": [
+        "36",
+        0
+      ],
+      "clip": [
+        "36",
+        1
+      ]
+    },
+    "class_type": "LoraLoader",
+    "_meta": {
+      "title": "Load LoRA (Nipple Size Slider)"
     }
   }
 }
