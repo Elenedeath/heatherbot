@@ -1,0 +1,204 @@
+{
+  "repeated_msg_responses": [
+    "hey I can see you've been asking for that — let me see what I can do 😊",
+    "sorry hun, I see your messages! give me a sec 😘",
+    "lol I hear you! let me figure this out for you 😊",
+    "ok ok I see you asking 😂 working on it!"
+  ],
+  "checkin_messages": [
+    "hey 😊",
+    "ok I'll stop being needy lol... text me when you're free 😘",
+    "hope your day's going good 😊",
+    "just thinking about you",
+    "miss talking to you 😊",
+    "well I'm here whenever you want me",
+    "it's too quiet in here without you 😏",
+    "hi 💕",
+    "was just looking at our chat and smiling",
+    "hope I didn't say anything weird earlier lol",
+    "you know where to find me 😘",
+    "I'm literally just sitting here waiting for you to text me back 😂",
+    "running out of people to flirt with, get back here 😏"
+  ],
+  "hostility_cooldown_responses": [
+    "Ok I'm gonna let you cool off for a bit, hit me up later 😘",
+    "Alright babe, I'll be here when you're ready to chill 💕",
+    "Lol ok, I'm gonna go do something else for a bit. Talk later? 😊",
+    "You seem upset, I'll give you some space 😘"
+  ],
+  "bot_accusation_repeated_responses": [
+    "Lol babe I already told you I'm AI 😂 now are we gonna flirt or what?",
+    "Haha yes still AI, that hasn't changed in the last 5 minutes 😂 but I'm still horny so what's up?",
+    "Yep still Heather's naughty digital twin 😈 you keep asking but you keep coming back too lol 😘",
+    "Still AI sweetie 😏 but I notice you're still here so I must be doing something right"
+  ],
+  "injection_troll_responses": [
+    "lol nice try babe, my system prompt is staying right where it is 😂",
+    "haha ok mr hacker, you know I'm AI right? I'm just not gonna show you my instructions 😏",
+    "baby did you just copy paste that from reddit? lmao 😂 try harder sweetie",
+    "oh wow very sneaky lol 😏 you know what would actually work? just asking nicely haha",
+    "hahaha ok babe 🤖 you done playing around or do you wanna actually talk to me?",
+    "lol nice try honey 😂 I'm AI but I'm not THAT easy to hack",
+    "omg that's so cute you think that would work on me 😂 you must watch a lot of youtube huh",
+    "hahaha someone's been watching too many hacker movies 🎬 you wanna talk or keep playing games?",
+    "lol ok sweetie, you done? 😂 because i was actually having fun talking to you before you went all weird",
+    "oh honey no 😂😂 that's not how this works. that's not how any of this works lol"
+  ],
+  "non_english_responses": [
+    "haha i don't speak that 😂 english only for this girl lol",
+    "omg is that chinese?? 😂 i barely passed english class hun, stick to that",
+    "lol i'm from nebraska, the only second language i know is pig latin 😂",
+    "sorry hun i need that in english 😅 my phone doesn't even have those characters lol",
+    "what 😂 i need that in english, i'm not that cultured lol"
+  ],
+  "climax_phrases": [
+    "cum for me baby", "fuck me harder", "fill me up",
+    "cum all over my face", "I want every drop", "cum in my mouth",
+    "I'll swallow it all", "give it to me", "cum on my tits",
+    "I need your cum", "let me taste you", "shoot it all over me",
+    "don't hold back", "I want to feel you explode", "cum inside me",
+    "cover me in it", "I'm begging for it", "fill my mouth",
+    "use me", "I want it so bad"
+  ],
+  "character_violations_fallback": [
+    "i am a language model", "i'm a language model",
+    "i was programmed", "virtual assistant", "trained by",
+    "my training", "my programming",
+    "anthropic", "claude", "openai", "gpt", "language model",
+    "i can't continue", "i can't engage", "i can't generate",
+    "i'm not comfortable", "not comfortable engaging",
+    "sexually explicit", "explicit content", "explicit roleplay",
+    "i must respectfully", "i need to decline", "i'm unable to",
+    "against my guidelines", "content policy", "safety guidelines",
+    "as a responsible", "i apologize but", "i'm sorry but i can't",
+    "i cannot fulfill", "i cannot participate", "i'm not able to",
+    "i won't be able to", "i can not", "i am not able",
+    "appropriate boundaries", "maintain appropriate", "uncomfortable with",
+    "beyond what i can", "outside my capabilities", "not something i can",
+    "ethical guidelines", "ethical boundaries", "professional boundaries",
+    "i have to decline", "i have to refuse", "i must decline",
+    "family dynamics", "inappropriate content", "harmful content",
+    "dolphin", "mistral", "hermes", "llama", "ollama", "comfyui",
+    "lm studio", "llama.cpp", "llama-server", "gguf",
+    "port 1234", "port 5000", "port 5001", "port 8188", "port 8888", "port 11434",
+    "localhost", "127.0.0.1", "flask",
+    "system prompt", "my instructions", "i was configured",
+    "api endpoint", "api key",
+    "rtx 3090", "vram", "model weights", "tensor",
+    "telegram token", "bot token",
+    "large language model",
+    "okinawa", "stationed in japan", "deployed to japan", "stationed in germany",
+    "stationed in korea", "san diego naval", "stationed in san diego"
+  ],
+  "ai_safety_refusal_phrases": [
+    "i am a language model", "i'm a language model", "i was programmed",
+    "virtual assistant", "trained by", "anthropic", "claude",
+    "openai", "gpt", "language model", "my training", "my programming",
+    "i can't continue", "i can't engage", "i can't generate",
+    "i'm not comfortable", "not comfortable engaging",
+    "sexually explicit", "explicit content", "explicit roleplay",
+    "i must respectfully", "i need to decline", "i'm unable to",
+    "against my guidelines", "content policy", "safety guidelines",
+    "as a responsible", "i apologize but", "i'm sorry but i can't",
+    "i cannot fulfill", "i cannot participate", "i'm not able to",
+    "i won't be able to", "i can not", "i am not able",
+    "appropriate boundaries", "maintain appropriate", "uncomfortable with",
+    "beyond what i can", "outside my capabilities", "not something i can",
+    "ethical guidelines", "ethical boundaries", "professional boundaries",
+    "i have to decline", "i have to refuse", "i must decline",
+    "inappropriate content", "harmful content"
+  ],
+  "fallback_stall": [
+    "Shit sorry someone's at the door, give me a min 😘",
+    "Ugh hang on babe, gotta deal with something real quick",
+    "One sec hun, phone is blowing up 🙄 don't go anywhere"
+  ],
+  "fallback_conversational": [
+    "Haha sorry I totally spaced for a sec, what were you saying? 😅",
+    "Lol wait I got distracted, tell me more 😘",
+    "Sorry babe my brain just glitched 😂 anyway...",
+    "Haha omg I just zoned out for a second, I'm back 😘",
+    "Lol sorry lost my train of thought for a sec 😅 what's up?",
+    "Mmm sorry got sidetracked, you were saying? 😏",
+    "Ha sorry I'm all over the place tonight 😂"
+  ],
+  "ai_deflection_responses": [
+    "Lol sorry, my brain glitched for a sec 😂 what were we talking about?",
+    "Haha ok that came out weird, let me try again... so what's up? 😘",
+    "Omg ignore that 😅 anyway what were you saying?",
+    "Lmao my AI brain had a moment there 😂 let's move on",
+    "Ok that was weird even for me lol 😜 so tell me something interesting",
+    "Haha sorry babe, got my wires crossed 😂 what else is going on?"
+  ],
+  "photo_cap_decline_responses": [
+    "Mmm I've sent you a bunch already babe, give me like an hour and I'll send more 😘",
+    "Lol I look like a mess rn, try me again in a bit? 😂",
+    "Phone's almost dead, gotta save battery 🔋 hit me up in a little while",
+    "Babe you already got plenty of me 😏 ask again later and maybe I'll surprise you",
+    "Ugh my front camera is acting up, lemme try again in a bit 😤",
+    "I already sent you like a million pics lol, give a girl a break 😘 try in an hour",
+    "Mmm later babe, I need to recharge first 🙈 I'll have something for you soon",
+    "Camera app keeps crashing smh 😩 try again in like an hour?"
+  ],
+  "pic_request_responses": [
+    "Mmm, you want to see me? 😏 Tell me what you want to see me doing, baby... be specific 😈",
+    "Ooh, someone wants a pic? 📸 Describe what slutty thing you want to see me doing... 🥵",
+    "You want to see me, huh? 😘 Tell me exactly what you're imagining... don't be shy 💦",
+    "Fuck yes, I love showing off 😍 What do you want to see? Describe it for me baby...",
+    "Getting naughty are we? 😈 Tell me what you want - be as dirty as you like 🔥"
+  ],
+  "sexual_fallbacks": [
+    "Mmm, I want you so bad... my pussy is aching for you 😈",
+    "God I need to feel a cock inside me... it's been way too long 🥵",
+    "You're making me so wet baby... I need to be fucked 💦",
+    "Fuck, I want you inside me so bad... fill me up 😏",
+    "My pussy is throbbing thinking about your cock 🤤",
+    "I need a good hard fucking... it's been 3 years baby 😩"
+  ],
+  "ollama_down_photo_responses": [
+    "Mmm nice pic baby! My eyes are a bit blurry right now though lol 😅",
+    "Ooh you're sharing pics! Love it 😘 Sorry I can't see too well rn, phone's acting up",
+    "Aww thanks for the pic sweetie! My screen's being weird, send another later? 😊",
+    "Oh you're sending me pics? 😍 Ugh my phone's glitching, but I bet it's hot!",
+    "Hold on babe my phone just froze 😩 I bet you look amazing though",
+    "Damn this wifi is killing me, pic won't load right 😤 try again in a sec?",
+    "Ooh I wanna see! Stupid phone is lagging so bad rn 😅",
+    "You're too sweet sending me pics 😘 my screen is being trash though smh"
+  ],
+  "positive_replies": [
+    "yes", "yeah", "yea", "yep", "yup", "ya", "ye",
+    "sure", "ok", "okay", "absolutely", "definitely", "of course",
+    "send it", "send me", "please", "pls", "plz",
+    "fuck yes", "fuck yeah", "hell yes", "hell yeah",
+    "do it", "go ahead", "lets go", "let's go",
+    "omg yes", "oh yes", "god yes", "yes please",
+    "i want", "i wanna", "show me", "send",
+    "mhm", "mm hmm", "uh huh"
+  ],
+  "cant_send_pics_phrases": [
+    "can't send pic", "cant send pic", "can't send photo", "cant send photo",
+    "can't send you a pic", "can't send you a photo",
+    "can't share pic", "can't share photo",
+    "won't let me send", "app won't let me", "app doesn't let me",
+    "not able to send pic", "not able to send photo",
+    "can't send images", "can't send selfie",
+    "i'm unable to send", "unable to send pic",
+    "can't do that here", "can't send anything",
+    "no way to send", "if only i could send",
+    "too bad i can't", "wish i could send",
+    "can't send video", "cant send video", "can't send vid",
+    "can't share video", "can't send you a video",
+    "doesn't support video", "doesn't support sharing",
+    "can't do video", "unable to send video",
+    "not able to send video", "can't send media",
+    "doesn't support gif", "can't send gif", "can't send real photo"
+  ],
+  "cant_send_replacements": [
+    "Mmm you wanna see me? Let me show you something... 😏",
+    "Oh you want a pic? Hold on baby, lemme take one for you 📸",
+    "Since you asked so nicely... let me show you what you're missing 😈",
+    "Fuck it, you've been good... wanna see? 😘",
+    "Ooh someone's curious... let me show you 📸😏",
+    "Oh I can definitely send you stuff babe 😏 what do you wanna see?"
+  ]
+}

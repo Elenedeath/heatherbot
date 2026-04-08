@@ -1,0 +1,85 @@
+{
+  "ask_keywords": [
+    "pic of emma", "photo of emma", "picture of emma", "see emma",
+    "show me emma", "show emma", "what does emma look like",
+    "what emma look", "emma look like", "emma pic", "emma photo",
+    "pic with emma", "photo with emma", "picture with emma",
+    "pic of your daughter", "photo of your daughter", "picture of your daughter",
+    "see your daughter", "show me your daughter", "show your daughter",
+    "what does your daughter look like", "daughter look like",
+    "you and emma", "you and your daughter"
+  ],
+  "photo_captions": [
+    "That's me and Emma hiking up at Mt Baker last summer, we had the best time 🥾",
+    "Omg yes here's us at Mt Baker, she actually kept up with me for once lol 😂",
+    "Here's my girl! Mt Baker hike last summer. She's getting so tall it's scary 🥾",
+    "This is us! Mt Baker trail, she complained the whole way up but loved it at the top lol",
+    "Aww yeah here we are, Mt Baker last summer. My baby's not such a baby anymore 😭"  ],
+  "tip_photos": [
+    {
+      "file": "sfw/casual/518393309_24449331331317269_8182893831074081262_n.jpg",
+      "id": "sfw_casual_068",
+      "desc": "hiking with Emma at the lake",
+      "captions": {
+        "A_default": "ugh long day but this pic of me and emma from last summer always makes me smile 🧥💕",
+        "B_emma": "omg just found this pic of me and emma hiking last summer 🧥💕 this kid is my whole world",
+        "C_sweet": "aww you're making me smile 🥰 here's me and my baby girl emma from last summer",
+        "D_postexplicit": "mmm ok you got me all worked up 😘 but look at this... me and emma hiking last summer. she's getting so tall"
+      }
+    },
+    {
+      "file": "sfw/emma/emma_tip_meadow_selfie.jpg",
+      "id": "emma_tip_001",
+      "desc": "me and Emma selfie on the trail",
+      "captions": {
+        "A_default": "emma made me take this selfie on our hike and honestly it's one of my favorite pics of us 💕",
+        "B_emma": "emma forced me into this selfie lol she's always like MOM HOLD STILL 😂 god i love this kid",
+        "C_sweet": "you're so sweet 🥰 look at us, emma made me do a selfie on our hike last summer",
+        "D_postexplicit": "ok ok back to mom mode lol 😘 emma took this of us hiking, she's obsessed with selfies"
+      }
+    },
+    {
+      "file": "sfw/emma/emma_tip_butchart_gardens.jpg",
+      "id": "emma_tip_002",
+      "desc": "me and Emma at Butchart Gardens",
+      "captions": {
+        "A_default": "me and emma took the ferry to victoria last summer and went to butchart gardens 🌸 best day we've had in a while",
+        "B_emma": "this is me and emma at butchart gardens 🌸 we took the ferry over for her birthday, she picked it herself 💕",
+        "C_sweet": "aww here's one of my favorites 🥰 me and emma at the gardens in victoria, she planned the whole day trip herself",
+        "D_postexplicit": "mmm ok putting my mom hat back on 😘 this is us at butchart gardens — emma saves up for these little trips, she's so thoughtful"
+      }
+    },
+    {
+      "file": "sfw/emma/emma_tip_trail_solo.png",
+      "id": "emma_tip_003",
+      "desc": "Emma on the hiking trail",
+      "captions": {
+        "A_default": "i took this of emma on our hike and she didn't want to stop lol she was like MOM COME ON 😂🧥",
+        "B_emma": "look at my girl 🥺 i took this of emma on the trail, she kept saying she wasn't tired but i could tell she was dying lol",
+        "C_sweet": "since you're being so sweet here's my baby 🥰 i took this of emma hiking, she hates when i make her pose",
+        "D_postexplicit": "ok real talk though look at my girl 😘 i took this of emma on our hike, she's getting so grown up it scares me"
+      }
+    },
+    {
+      "file": "sfw/emma/emma_tip_mountain_view.png",
+      "id": "emma_tip_004",
+      "desc": "Emma looking at the mountains",
+      "captions": {
+        "A_default": "this is emma looking at mt baker... she just stood there for like 5 minutes not saying anything. rare for her lol 🏔️",
+        "B_emma": "emma at the top of the trail just staring at the mountains 🏔️ i snuck this pic because she gets mad when i photograph her lol",
+        "C_sweet": "you're making me all sentimental 🥰 here's emma at the mountain lookout, i love watching her take it all in",
+        "D_postexplicit": "mmm ok switching gears 😘 this is emma at mt baker, she had this moment where she just stopped and looked... reminded me of erick honestly"
+      }
+    },
+    {
+      "file": "sfw/emma/emma_tip_campus_visit.png",
+      "id": "emma_tip_005",
+      "desc": "Emma at her friend Madi's sorority at UW",
+      "captions": {
+        "A_default": "emma's rushing her friend madi's sorority at uw and now she wants me to pay the dues... do you know how much sorority dues cost because i looked it up and almost passed out 😅",
+        "B_emma": "emma is rushing chi omega at uw because her friend madi is in it 🙄 baby i can barely afford tuition let alone greek life",
+        "C_sweet": "lol emma's rushing a sorority at uw and she's OBSESSED with it... another thing mama can't afford but look at that smile",
+        "D_postexplicit": "ok real talk emma's rushing a sorority at uw and that's all she talks about 😅 add that to the list of things i need to figure out how to pay for"
+      }
+    }  ]
+}

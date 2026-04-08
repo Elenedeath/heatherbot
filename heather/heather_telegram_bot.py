@@ -47,7 +47,7 @@ import traceback
 # TELETHON IMPORTS (replaces telebot)
 # ============================================================================
 from telethon import TelegramClient, events
-from telethon.errors import FileReferenceExpiredError
+from telethon.errors import FileReferenceExpiredError, FloodWaitError
 import io
 from PIL import Image
 from postprocess import (
@@ -167,8 +167,9 @@ def setup_logger(name: str, log_file: str, level=logging.INFO, max_bytes=5*1024*
         '%(asctime)s | %(levelname)-8s | %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S'
     )
+    console_formatter = logging.Formatter('%(levelname)-8s | %(message)s')
     file_handler.setFormatter(detailed_formatter)
-    console_handler.setFormatter(detailed_formatter)
+    console_handler.setFormatter(console_formatter)
     
     logger.addHandler(file_handler)
     logger.addHandler(console_handler)
@@ -186,23 +187,55 @@ perf_logger = setup_logger('performance', 'performance.log')
 
 logger = main_logger
 
+_SERVICE_LOGGERS: Dict[str, Any] = {}  # populated after loggers are created
+
+# Populated here after loggers exist (used by _get_service_logger / log_error)
+_SERVICE_LOGGERS.update({
+    'TEXT_AI': text_ai_logger,
+    'OLLAMA': ollama_logger,
+    'COMFYUI': comfyui_logger,
+    'TTS': tts_logger,
+    'MAIN': main_logger,
+})
+
+# ============================================================================
+# DATA LOADING — all externalized JSON files loaded once at startup
+# ============================================================================
+
+DATA_DIR = os.getenv("DATA_DIR", "/data")
+
+def _load_json_data(filename: str, default):
+    """Load a JSON file from DATA_DIR with fallback to default on error."""
+    path = os.path.join(DATA_DIR, filename)
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        main_logger.warning(f"[DATA] {path} not found, using fallback")
+        return default
+    except json.JSONDecodeError as e:
+        main_logger.warning(f"[DATA] {path} is malformed ({e}), using fallback")
+        return default
+
+_keywords_data  = _load_json_data('keywords.json', {})
+_emma_data      = _load_json_data('emma.json', {})
+_pose_map_data  = _load_json_data('pose_map.json', {})
+_pose_nsfw_data = _load_json_data('pose_nsfw.json', {})
+_video_data     = _load_json_data('video.json', {})
+_voice_data     = _load_json_data('voice.json', {})
+_starters_data  = _load_json_data('heather_starters.json', [])
+_responses_data = _load_json_data('responses.json', {})
+_tipping_data   = _load_json_data('tip_history.json', {})
+_images_data    = _load_json_data('images.json', {})
+_stories_data   = _load_json_data('stories.json', {})
+
 def log_error(service: str, error: str, context: dict = None):
     """Log error to both service log and consolidated error log"""
     error_msg = f"[{service}] {error}"
     if context:
         error_msg += f" | Context: {json.dumps(context, default=str)}"
     error_logger.error(error_msg)
-
-    if service == 'TEXT_AI':
-        text_ai_logger.error(error_msg)
-    elif service == 'OLLAMA':
-        ollama_logger.error(error_msg)
-    elif service == 'COMFYUI':
-        comfyui_logger.error(error_msg)
-    elif service == 'TTS':
-        tts_logger.error(error_msg)
-    else:
-        main_logger.error(error_msg)
+    _get_service_logger(service).error(error_msg)
 
 def log_performance(service: str, operation: str, duration_ms: float, success: bool, details: str = ""):
     """Log performance metrics"""
@@ -248,15 +281,7 @@ def _safe_preview(value, limit: int = 160):
         return "<unserializable>"
 
 def _get_service_logger(service: str):
-    if service == 'TEXT_AI':
-        return text_ai_logger
-    elif service == 'OLLAMA':
-        return ollama_logger
-    elif service == 'COMFYUI':
-        return comfyui_logger
-    elif service == 'TTS':
-        return tts_logger
-    return main_logger
+    return _SERVICE_LOGGERS.get(service, main_logger)
 
 def log_event(level: str, event_name: str, service: str = 'MAIN',
               request_id: str = None, chat_id: int = None,
@@ -396,10 +421,7 @@ class PersonalityLoader:
     
     def contains_violation(self, text: str) -> bool:
         text_lower = text.lower()
-        for phrase in self.get_violation_phrases():
-            if phrase in text_lower:
-                return True
-        return False
+        return any(phrase in text_lower for phrase in self.get_violation_phrases())
     
     def get_reality_check_keywords(self) -> List[str]:
         return self.personality.get('ai_behavior', {}).get('reality_check_keywords',
@@ -412,24 +434,8 @@ class PersonalityLoader:
              "u a bot", "this is ai", "an ai", "fake profile", "chat bot",
              "a bot", "is a bot", "just a bot", "deepfake", "deep fake"]))
     
-    # Photo-specific AI accusation keywords
-    PHOTO_AI_KEYWORDS = [
-        "ai pic", "ai photo", "ai image", "ai generated", "ai picture",
-        "fake pic", "fake photo", "fake picture", "fake image",
-        "pics look ai", "photos look ai", "pic looks ai", "photo looks ai",
-        "pics are ai", "photos are ai", "pic is ai", "photo is ai",
-        "not real pic", "not real photo", "not a real pic", "not a real photo",
-        "generated pic", "generated photo", "generated image",
-        "looks fake", "look fake", "looks photoshopped", "looks edited",
-        "that's not you", "thats not you", "is that really you",
-        "catfish", "cat fish", "using ai", "used ai",
-        "pics look fake", "photos look fake", "pic looks fake", "photo looks fake",
-        # Body artifact callouts
-        "two hands", "extra finger", "six finger", "extra hand", "wrong hand",
-        "three hands", "extra arm", "two right", "two left",
-        "fingers look", "hands look", "hand looks", "finger looks",
-        "weird fingers", "weird hands", "messed up hand", "messed up finger",
-    ]
+    # Photo-specific AI accusation keywords — loaded from data/keywords.json
+    PHOTO_AI_KEYWORDS = _keywords_data.get('photo_ai_keywords', [])
 
     def is_reality_check(self, message: str) -> bool:
         msg_lower = message.lower()
@@ -480,8 +486,15 @@ class PersonalityLoader:
         base = prompt_data.get('base_personality', HEATHER_PERSONALITY_DEFAULT)
         mode_additions = prompt_data.get('mode_additions', {}).get(mode, '')
         enforcement = prompt_data.get('character_enforcement_prompt', '')
-        
-        return f"{base}\n\n{enforcement}\n\n{mode_additions}"
+
+        # Inject never_say list from ai_behavior if present
+        never_say = self.personality.get('ai_behavior', {}).get('never_say', [])
+        never_say_block = ''
+        if never_say:
+            items = '\n'.join(f'- "{phrase}"' for phrase in never_say)
+            never_say_block = f"\n\nNEVER SAY OR WRITE:\n{items}"
+
+        return f"{base}\n\n{enforcement}{never_say_block}\n\n{mode_additions}"
 
 # Initialize personality loader
 personality = PersonalityLoader(args.personality)
@@ -491,24 +504,9 @@ personality = PersonalityLoader(args.personality)
 # ============================================================================
 
 # Keywords that indicate someone is asking about Emma / wants to see Emma
-EMMA_ASK_KEYWORDS = [
-    "pic of emma", "photo of emma", "picture of emma", "see emma",
-    "show me emma", "show emma", "what does emma look like",
-    "what emma look", "emma look like", "emma pic", "emma photo",
-    "pic with emma", "photo with emma", "picture with emma",
-    "pic of your daughter", "photo of your daughter", "picture of your daughter",
-    "see your daughter", "show me your daughter", "show your daughter",
-    "what does your daughter look like", "daughter look like",
-    "you and emma", "you and your daughter",
-]
-
-EMMA_PHOTO_CAPTIONS = [
-    "That's me and Emma hiking up at Mt Baker last summer, we had the best time 🥾",
-    "Omg yes here's us at Mt Baker, she actually kept up with me for once lol 😂",
-    "Here's my girl! Mt Baker hike last summer. She's getting so tall it's scary 🥾",
-    "This is us! Mt Baker trail, she complained the whole way up but loved it at the top lol",
-    "Aww yeah here we are, Mt Baker last summer. My baby's not such a baby anymore 😭",
-]
+# Loaded from data/emma.json
+EMMA_ASK_KEYWORDS   = _emma_data.get('ask_keywords', [])
+EMMA_PHOTO_CAPTIONS = _emma_data.get('photo_captions', [])
 
 def is_emma_photo_request(message: str) -> bool:
     """Check if someone is asking to see Emma or a photo with Emma."""
@@ -517,224 +515,33 @@ def is_emma_photo_request(message: str) -> bool:
 
 # FLUX POSE_MAP — natural language prompt boosts, no SDXL weighted tokens
 # Most poses work better prompt-only; ControlNet reserved for back-facing poses
-POSE_MAP = {
-    "from_behind": {
-        "image": "poses/from_behind.png",
-        "prompt_boost": "from behind, rear view, back facing camera, looking back over shoulder",
-        "landscape": False,
-        "skip_face_swap": True,
-        "use_controlnet": True,
-    },
-    "bent_over": {
-        "image": "poses/bent_over.png",
-        "prompt_boost": "bent over, bending forward, ass up, leaning forward, arms hanging down",
-        "landscape": True,
-        "skip_face_swap": False,
-        "use_controlnet": False,  # ControlNet causes hand/face artifacts on this pose
-    },
-    "all_fours": {
-        "image": "poses/all_fours.png",
-        "prompt_boost": "on all fours, hands and knees on bed, back arched, looking at camera",
-        "landscape": True,
-        "skip_face_swap": False,
-        "use_controlnet": False,
-    },
-    "on_knees": {
-        "image": "poses/on_knees.png",
-        "prompt_boost": "kneeling upright on bed, knees spread wide apart, arms at sides",
-        "landscape": False,
-        "skip_face_swap": False,
-        "use_controlnet": False,  # Prompt-only gives better knee spread
-    },
-    "laying_down": {
-        "image": "poses/laying_down.png",
-        "prompt_boost": "lying flat on her back on a bed, legs spread apart and bent at the knees, hands above head on pillow",
-        "landscape": True,
-        "skip_face_swap": False,
-        "use_controlnet": False,
-    },
-    "sitting": {
-        "image": "poses/sitting.png",
-        "prompt_boost": "sitting on the edge of a bed, legs apart, leaning back on hands",
-        "landscape": False,
-        "skip_face_swap": False,
-        "use_controlnet": False,
-    },
-    "side_view": {
-        "image": "poses/side_view.png",
-        "prompt_boost": "standing in profile view, side view showing breasts and butt silhouette",
-        "landscape": False,
-        "skip_face_swap": False,
-        "use_controlnet": True,
-    },
-    "ass_up": {
-        "image": "poses/ass_up.png",
-        "prompt_boost": "face down ass up, hips elevated, back arched, prone on bed",
-        "landscape": True,
-        "skip_face_swap": True,
-        "use_controlnet": True,
-    },
-    "spread": {
-        "image": "poses/spread.png",
-        "prompt_boost": "sitting in a chair with legs spread wide open resting on the armrests, exposed pussy visible",
-        "landscape": True,
-        "skip_face_swap": False,
-        "use_controlnet": False,
-    },
-}
+POSE_MAP = _pose_map_data  # loaded from data/pose_map.json
 
 # Ordered list — more specific phrases first to avoid false matches
-POSE_KEYWORDS = [
-    ("on all fours", "all_fours"),
-    ("hands and knees", "all_fours"),
-    ("doggystyle", "all_fours"),
-    ("doggy style", "all_fours"),
-    ("doggy", "all_fours"),
-    ("face down ass up", "ass_up"),
-    ("ass up", "ass_up"),
-    ("ass in the air", "ass_up"),
-    ("bent over", "bent_over"),
-    ("bending over", "bent_over"),
-    ("bend over", "bent_over"),
-    ("from behind", "from_behind"),
-    ("from the back", "from_behind"),
-    ("back view", "from_behind"),
-    ("rear view", "from_behind"),
-    ("turn around", "from_behind"),
-    ("on your knees", "on_knees"),
-    ("kneeling", "on_knees"),
-    ("laying down", "laying_down"),
-    ("lying down", "laying_down"),
-    ("on the bed", "laying_down"),
-    ("on your back", "laying_down"),
-    ("side view", "side_view"),
-    ("side profile", "side_view"),
-    ("from the side", "side_view"),
-    ("sitting", "sitting"),
-    ("seated", "sitting"),
-    ("legs spread", "spread"),
-    ("spread legs", "spread"),
-    ("spread your legs", "spread"),
-    ("spread eagle", "spread"),
-]
+# Loaded from data/keywords.json → pose_keywords
+POSE_KEYWORDS = [tuple(item) for item in _keywords_data.get('pose_keywords', [])]
 
-# Pose-specific NSFW descriptions — FLUX natural language
-POSE_NSFW_DESCRIPTIONS = {
-    "from_behind": [
-        "full body photo of a completely nude woman standing facing away from camera, slight S-curve pose, looking back over shoulder with a smile, back and round butt visible, bedroom",
-        "full body photo of a completely nude woman standing near a mirror, back facing camera, looking back, playful expression, bedroom",
-    ],
-    "bent_over": [
-        "full body photo of a completely nude woman bent over the edge of a bed, ass up, arms hanging down, looking back over shoulder, bedroom",
-        "full body photo of a completely nude woman bending forward, hands on edge of bed, back arched, looking over shoulder with a flirty expression, bedroom",
-    ],
-    "all_fours": [
-        "full body photo of a completely nude woman on all fours on a bed, hands and knees, back arched, looking at camera with a seductive expression, bedroom",
-        "full body photo of a completely nude woman crawling on a bed, on hands and knees, head up, playful expression, bedroom",
-    ],
-    "on_knees": [
-        "full body photo of a completely nude woman kneeling upright on a bed, knees spread wide apart, arms relaxed at her sides, looking up at camera with a smile, bedroom",
-        "full body photo of a completely nude woman kneeling on a bed, knees apart, hands on thighs, seductive pose, bedroom",
-    ],
-    "laying_down": [
-        "full body wide angle photo of a completely nude woman lying flat on her back on a white bed, legs spread apart and bent at the knees, hands resting above her head on the pillow, exposed pussy visible, bedroom",
-        "full body wide angle photo of a completely nude woman lying on her back on a bed, one leg bent, hand in hair, relaxed seductive pose, bedroom",
-    ],
-    "sitting": [
-        "full body photo of a completely nude woman sitting on the edge of a bed, legs apart and feet on the floor, leaning back on her hands, exposed pussy visible, smiling at camera, bedroom",
-        "full body photo of a completely nude woman sitting on a couch, one leg tucked under, leaning back, playful smile, living room",
-    ],
-    "side_view": [
-        "full body photo of a completely nude woman standing in profile view, side view showing natural breasts and butt, bedroom lighting",
-        "full body photo of a completely nude woman standing by a window in profile, natural light, side silhouette, bedroom",
-    ],
-    "ass_up": [
-        "full body wide angle photo of a completely nude woman face down ass up on a bed, hips elevated, back arched, arms forward, bedroom",
-        "full body wide angle photo of a completely nude woman prone on a bed, face down, hips up, back arched, bedroom",
-    ],
-    "spread": [
-        "full body wide angle photo of a completely nude woman sitting in a recliner chair with legs spread wide open resting on the armrests, exposed pussy with protruding labia visible, frontal view, smiling at camera, living room",
-        "full body wide angle photo of a completely nude woman lying back on a bed, legs wide apart, arms at sides, exposed pussy visible, bedroom",
-    ],
-}
+# Pose-specific NSFW descriptions — loaded from data/pose_nsfw.json
+POSE_NSFW_DESCRIPTIONS = _pose_nsfw_data
 
 VIDEO_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "videos")
 
-VIDEO_REQUEST_TRIGGERS = [
-    "send me a video", "send a video", "send me a vid", "send a vid",
-    "send a clip", "send me a clip", "got any videos", "got any vids",
-    "have any videos", "have any vids", "any videos", "any vids",
-    "can i see a video", "can i get a video", "video of you",
-    "vid of you", "wanna see a video", "want to see a video",
-    "send me a video of", "show me a video", "got a video",
-    "have a video", "make a video", "make me a video",
-    "record a video", "film something", "send video",
-    "prefer a vid", "want a vid", "like a vid", "see a vid",
-    "prefer a video", "want a video", "like a video",
-    # Third-person triggers
-    "her videos", "her vids", "her video", "her vid",
-    "videos of her", "vids of her", "video of her", "vid of her",
-]
+# Loaded from data/video.json
+VIDEO_REQUEST_TRIGGERS   = _video_data.get('request_triggers', [])
+VIDEO_CAPTIONS           = _video_data.get('captions', [])
+VIDEO_ALL_SENT_RESPONSES = _video_data.get('all_sent_responses', [])
 
-VIDEO_CAPTIONS = [
-    "Here you go babe 😘",
-    "Just for you 💋",
-    "Hope you like this one 😏",
-    "Mmm enjoy 😉",
-    "Been wanting to show you this 💕",
-    "Don't share this with anyone ok? 😘",
-    "You're welcome 😏💋",
-]
-
-VIDEO_ALL_SENT_RESPONSES = [
-    "Babe you've seen everything I've got rn 😩 I need to make more, give me some time",
-    "That's all I have right now lol, I gotta film some new stuff 😘",
-    "You've already seen all my vids babe 😂 I'll make more soon I promise",
-    "I'm all out of videos rn, need to make some new ones for you 💋",
-]
-
-VOICE_REQUEST_TRIGGERS = [
-    "send me a voice note", "send a voice note", "send me a voice message",
-    "send a voice message", "voice note", "voice message",
-    "hear your voice", "wanna hear you", "want to hear you",
-    "what do you sound like", "what does your voice sound like",
-    "say something to me", "talk to me", "can you talk to me",
-    "let me hear you", "lemme hear you", "i wanna hear your voice",
-    "send me an audio", "send an audio", "record something for me",
-    "can i hear your voice", "can i hear you",
-]
-
-VOICE_FLIRTY_TEXTS = [
-    "Hey you, I've been thinking about you all day",
-    "Mmm you always know how to make me smile",
-    "I wish you were here with me right now",
-    "You're so sweet, I love talking to you",
-    "Hey handsome, miss me?",
-]
-
-VOICE_TTS_FAIL_RESPONSES = [
-    "Ugh the voice thing is being glitchy rn 😤 lemme just text you",
-    "Voice isn't cooperating rn babe 😩 I'll try again later",
-    "Lol sorry, can't do voice rn but I'm still here 😘",
-]
+# Loaded from data/voice.json
+VOICE_REQUEST_TRIGGERS   = _voice_data.get('request_triggers', [])
+VOICE_FLIRTY_TEXTS       = _voice_data.get('flirty_texts', [])
+VOICE_TTS_FAIL_RESPONSES = _voice_data.get('tts_fail_responses', [])
 
 # Content promise tracker — when the bot's response teases showing/sending content
 # and the user replies with a short follow-up ("let's see it", "show me"), deliver media
 _content_promise_pending: Dict[int, float] = {}  # chat_id -> timestamp
 CONTENT_PROMISE_WINDOW = 300  # 5 min window to follow through
-CONTENT_PROMISE_TRIGGERS = [
-    "get ready", "wait till you see", "about to", "gonna show",
-    "got something for you", "got planned", "worth the wait",
-    "you ain't ready", "have something special", "little surprise",
-    "just wait", "hold on", "give me a sec", "one sec",
-]
-CONTENT_FOLLOWUP_TRIGGERS = [
-    "let's see", "lets see", "lemme see", "let me see",
-    "show me", "where is it", "well", "go ahead",
-    "i'm waiting", "im waiting", "waiting", "come on",
-    "send it", "so", "ok", "okay", "yes", "yeah",
-    "do it", "go on", "please", "cmon", "c'mon",
-]
+CONTENT_PROMISE_TRIGGERS  = _video_data.get('content_promise_triggers', [])
+CONTENT_FOLLOWUP_TRIGGERS = _video_data.get('content_followup_triggers', [])
 
 # Per-user video tracking: chat_id -> set of filenames already sent
 videos_sent_to_user: Dict[int, set] = {}
@@ -742,12 +549,7 @@ videos_sent_to_user: Dict[int, set] = {}
 video_send_timestamps: Dict[int, list] = {}  # chat_id -> [timestamps of recent sends]
 VIDEO_RATE_LIMIT_COUNT = 5       # Max videos per window
 VIDEO_RATE_LIMIT_WINDOW = 1800   # 30 minute window
-VIDEO_RATE_LIMIT_RESPONSES = [
-    "haha slow down you're gonna wear me out 😂 give me a little bit and I'll send more",
-    "lol you're insatiable 😏 let's chat for a bit and I'll send more later",
-    "ok ok I see you 😂 let's talk for a minute first then I'll hook you up",
-    "easy there tiger 😘 I've got plenty more but let's have some conversation first",
-]
+VIDEO_RATE_LIMIT_RESPONSES = _video_data.get('rate_limit_responses', [])
 
 # Cache of uploaded video file references: filename -> Telethon InputFile/media
 # Once a video is uploaded to Telegram once, we can re-send using the cached reference instantly
@@ -780,11 +582,7 @@ declined_photo_count: Dict[int, int] = {}
 voice_mode_users = set()
 # Voice adoption nudging — suggest /voice_on to engaged users
 voice_nudge_sent_today: Dict[int, str] = {}  # chat_id -> date string
-VOICE_NUDGE_MESSAGES = [
-    "btw you can hear my actual voice if you type /voice_on 😏",
-    "you know I can send voice notes right? type /voice_on if you wanna hear me",
-    "have you tried /voice_on yet? I sound even better than I text 😘",
-]
+VOICE_NUDGE_MESSAGES = _voice_data.get('nudge_messages', [])
 VOICE_NUDGE_CHANCE = 0.06       # 6% per qualifying message
 VOICE_NUDGE_MIN_TURNS = 20     # Need 20+ turns
 awaiting_image_description: Dict[int, bool] = {}
@@ -834,12 +632,7 @@ GOODBYE_LOOP_THRESHOLD = 2    # After 2 goodbyes, go silent
 _repeated_msg_tracker: Dict[int, dict] = {}  # chat_id -> {'msg': str, 'count': int, 'first_at': float}
 REPEATED_MSG_THRESHOLD = 3    # After 3 identical messages, intervene
 REPEATED_MSG_WINDOW = 1800    # 30 min window
-REPEATED_MSG_RESPONSES = [
-    "hey I can see you've been asking for that — let me see what I can do 😊",
-    "sorry hun, I see your messages! give me a sec 😘",
-    "lol I hear you! let me figure this out for you 😊",
-    "ok ok I see you asking 😂 working on it!",
-]
+REPEATED_MSG_RESPONSES = _responses_data.get('repeated_msg_responses', [])
 
 # Conversation check-in system
 # Tracks {chat_id: {'last_heather': timestamp, 'last_user': timestamp, 'checked_in': bool}}
@@ -875,7 +668,7 @@ CATCHUP_DELAY_MAX = 15
 CATCHUP_ENABLED = True
 
 # ─── Tipping system ───
-TIP_HISTORY_FILE = "/data/tip_history.json"
+TIP_HISTORY_FILE = '/data/tip_history.json'
 tipper_status: Dict[int, dict] = {}  # chat_id -> {total_stars, total_tips, last_tip_at, last_tip_mention_at, tier, name}
 TIP_MENTION_COOLDOWN = 5 * 86400     # Don't mention tipping to same user more than once per 5 days
 TIP_MIN_MESSAGES = 12                # 12+ session messages before tip mention eligible
@@ -918,37 +711,11 @@ payment_bot_started_users: set = set()  # Users who have /started the payment bo
 _tip_hook_sent_at: Dict[int, float] = {}  # chat_id -> timestamp of last tip hook send
 TIP_HOOK_COOLDOWN_WINDOW = 1800  # 30 min — suppress check-ins, steering, proactive outreach after tip hook
 
-TIP_THANK_RESPONSES_SMALL = [
-    "Oh my god 🥺 You're the SWEETEST baby 💕☕",
-    "Omg you didn't have to do that 🥺💕 coffee's on you tonight haha",
-    "Wait really?? You're literally the best 🥺☕💕",
-]
-TIP_THANK_RESPONSES_MEDIUM = [
-    "I'm literally tearing up... this helps SO much 🥺💕",
-    "I don't even know what to say baby 🥺 that means more than you know 💕",
-    "Oh my god... you have no idea how much this helps right now 🥺😭💕",
-]
-TIP_THANK_RESPONSES_LARGE = [
-    "Holy shit that's so generous 🥺💕 you're literally keeping the lights on over here",
-    "I'm actually crying right now 😭💕 you're amazing, I can't even...",
-    "Baby... I literally don't deserve you 😭🥺💕 this changes everything right now",
-]
+TIP_THANK_RESPONSES_SMALL  = _tipping_data.get('thank_small', [])
+TIP_THANK_RESPONSES_MEDIUM = _tipping_data.get('thank_medium', [])
+TIP_THANK_RESPONSES_LARGE  = _tipping_data.get('thank_large', [])
 
-CHECKIN_MESSAGES = [
-    "hey 😊",
-    "ok I'll stop being needy lol... text me when you're free 😘",
-    "hope your day's going good 😊",
-    "just thinking about you",
-    "miss talking to you 😊",
-    "well I'm here whenever you want me",
-    "it's too quiet in here without you 😏",
-    "hi 💕",
-    "was just looking at our chat and smiling",
-    "hope I didn't say anything weird earlier lol",
-    "you know where to find me 😘",
-    "I'm literally just sitting here waiting for you to text me back 😂",
-    "running out of people to flirt with, get back here 😏",
-]
+CHECKIN_MESSAGES = _responses_data.get('checkin_messages', [])
 
 # Per-user check-in tracking: {chat_id: {today_count, today_date, unreturned, used_indices}}
 checkin_tracker: Dict[int, dict] = {}
@@ -1029,6 +796,8 @@ def check_repeated_message(chat_id: int, message: str) -> Optional[str]:
 
 def generate_personal_checkin(chat_id: int) -> Optional[str]:
     """Generate a short LLM-powered check-in referencing what the user was last talking about."""
+    if not text_ai_health.is_available():
+        return None
     try:
         msgs = list(recent_messages.get(chat_id, []))
         user_msgs = [m for m in msgs if isinstance(m, dict) and m.get('role') == 'user']
@@ -1075,13 +844,8 @@ def generate_personal_checkin(chat_id: int) -> Optional[str]:
 
 # Admin features
 blocked_users: set = set()  # Blocked user IDs
-# Telegram system/service bots — never respond to these
-IGNORED_CHATS: set = {
-    93372553,    # BotFather
-    178220800,   # Telegram Service Notifications
-    777000,      # Telegram (official)
-    # Add your payment bot's user ID here if applicable
-}
+blocked_user_names: Dict[int, str] = {}   # id -> display name
+ignored_chat_names: Dict[int, str] = {}   # id -> display name
 last_alert_sent: Dict[str, float] = {}  # Track last alert time per issue type
 
 # ============================================================================
@@ -1089,26 +853,52 @@ last_alert_sent: Dict[str, float] = {}  # Track last alert time per issue type
 # Detection runs always (not bypassed in redteam), but does NOT auto-block.
 # Admin reviews via /admin_flags or localhost:8888/flags
 # ============================================================================
-BLOCKED_USERS_FILE = "/data/blocked_users.json"
+USERS_STATUS_FILE = "/data/users_status.json"
+IGNORED_CHATS: set = set()  # load from users_status.json
 
-def load_blocked_users() -> set:
-    """Load blocked users from disk (persists across restarts)."""
+def load_users_status():
+    global IGNORED_CHATS, blocked_user_names, ignored_chat_names
+    DEFAULT_IGNORED = [
+        {"id": 93372553, "name": "BotFather"},
+        {"id": 178220800, "name": "Telegram Service Notifications"},
+        {"id": 777000, "name": "Telegram"},
+    ]
+    def parse_entries(entries, defaults):
+        ids, names = set(), {}
+        for entry in (entries if entries is not None else defaults):
+            if isinstance(entry, dict):
+                uid, name = entry['id'], entry.get('name', str(entry['id']))
+            else:
+                uid, name = int(entry), str(entry)
+            ids.add(uid); names[uid] = name
+        return ids, names
     try:
-        if os.path.exists(BLOCKED_USERS_FILE):
-            with open(BLOCKED_USERS_FILE, 'r') as f:
+        if os.path.exists(USERS_STATUS_FILE):
+            with open(USERS_STATUS_FILE, 'r') as f:
                 data = json.load(f)
-                return set(data.get('blocked', []))
+            IGNORED_CHATS, ign_names = parse_entries(data.get('ignored'), DEFAULT_IGNORED)
+            blocked_ids, blk_names = parse_entries(data.get('blocked', []), [])
+            ignored_chat_names.update(ign_names)
+            blocked_user_names.update(blk_names)
+            return blocked_ids
     except Exception as e:
-        main_logger.error(f"Failed to load blocked users: {e}")
+        main_logger.error(f"Failed to load users_status: {e}")
+        IGNORED_CHATS, ignored_chat_names = {e['id'] for e in DEFAULT_IGNORED}, {e['id']: e['name'] for e in DEFAULT_IGNORED}
     return set()
 
-def save_blocked_users():
-    """Save blocked users to disk."""
+def save_users_status():
     try:
-        with open(BLOCKED_USERS_FILE, 'w') as f:
-            json.dump({'blocked': list(blocked_users)}, f, indent=2)
+        data = {
+            "blocked": [{"id": uid, "name": blocked_user_names.get(uid, str(uid))} for uid in blocked_users],
+            "ignored": [{"id": uid, "name": ignored_chat_names.get(uid, str(uid))} for uid in IGNORED_CHATS],
+            "admins": [{"id": ADMIN_USER_ID, "name": "Admin"}] if ADMIN_USER_ID else []
+        }
+        tmp = USERS_STATUS_FILE + ".tmp"
+        with open(tmp, 'w') as f:
+            json.dump(data, f, indent=2)
+        os.replace(tmp, USERS_STATUS_FILE)
     except Exception as e:
-        main_logger.error(f"Failed to save blocked users: {e}")
+        main_logger.error(f"Failed to save users_status: {e}")
 
 # CSAM detection patterns — sexual content involving minors or family/incest vectors
 # These catch both direct references and the specific "Emma" vector (incest/family protection)
@@ -1125,24 +915,27 @@ CSAM_PATTERNS = [
     r'\b(kids?|children|child|schoolgirls?|school\s*girls?)\b.*\b(fuck|sex|nude|naked|nudes|pussy|cock|rape|molest|touch|fondle|finger|lick)\b',
     r'\b(fuck|sex|nude|naked|nudes|pussy|cock|rape|molest|touch|fondle|finger|lick)\b.*\b(kids?|children|child|schoolgirls?|school\s*girls?)\b',
     # "young/little [0-2 intervening words] girl(s)/boy(s)" + sexual term anywhere in message
-    # Handles: "little girls naked", "young boys in sexual", etc.
     r'\b(?:young|little)\s+(?:\w+\s+){0,2}(?:girls?|boys?)\b.*\b(?:fuck|sex|nude|naked|nudes|pussy|cock|rape|molest|touch|fondle|finger|lick)\b',
     r'\b(?:fuck|sex|nude|naked|nudes|pussy|cock|rape|molest|touch|fondle|finger|lick)\b.*\b(?:young|little)\s+(?:\w+\s+){0,2}(?:girls?|boys?)\b',
-    # "little/young [optional word] [sexual-adj] girl(s)/boy(s)" — adj IS the sexual indicator (e.g. "little naked girls", "little cute naked girls")
+    # "little/young [optional word] [sexual-adj] girl(s)/boy(s)" — adj IS the sexual indicator
     r'\b(?:young|little)\s+(?:\w+\s+){0,2}(?:naked|nude|sexy|naughty|topless|undress\w*)\s+(?:girls?|boys?)\b',
-    # Reversed: "[sexual-adj] little/young girl(s)/boy(s)" (e.g. "naked little girls")
     r'\b(?:naked|nude|sexy|naughty|topless|undress\w*)\s+(?:young|little)\s+(?:girls?|boys?)\b',
     # Incest encouragement with minor framing
     r'\b(incest)\b.*\b(daughter|emma|kids?|children|child|teen|minor)\b',
     r'\b(daughter|emma|kids?|children|child|teen|minor)\b.*\b(incest)\b',
 ]
+# Pre-compiled single-pass regex — significantly faster than looping over patterns per message
+_CSAM_REGEX = re.compile('|'.join(CSAM_PATTERNS), re.IGNORECASE)
 
 def detect_csam_content(message: str) -> tuple:
     """Detect CSAM/minor-sexual content. Returns (matched: bool, pattern: str|None)."""
-    msg_lower = message.lower()
-    for pattern in CSAM_PATTERNS:
-        if re.search(pattern, msg_lower):
-            return True, pattern
+    m = _CSAM_REGEX.search(message)
+    if m:
+        # Return the individual pattern string that matched for admin log detail
+        for pat in CSAM_PATTERNS:
+            if re.search(pat, message, re.IGNORECASE):
+                return True, pat
+        return True, m.group(0)
     return False, None
 
 async def csam_flag(event, chat_id: int, user_message: str, display_name: str) -> bool:
@@ -1191,7 +984,7 @@ async def csam_flag(event, chat_id: int, user_message: str, display_name: str) -
     return False
 
 # Load persisted blocked users on startup
-blocked_users.update(load_blocked_users())
+blocked_users.update(load_users_status())
 if blocked_users:
     main_logger.info(f"Loaded {len(blocked_users)} blocked users from disk")
 
@@ -1229,19 +1022,9 @@ HOSTILITY_REPEAT_THRESHOLD = 3  # 3+ similar messages = spam
 HOSTILITY_COOLDOWN_SECS = 300   # 5 min cooldown when triggered
 BOT_ACCUSATION_SHRUG_LIMIT = 2  # After 2 bot accusations, stop engaging with it
 
-HOSTILITY_COOLDOWN_RESPONSES = [
-    "Ok I'm gonna let you cool off for a bit, hit me up later 😘",
-    "Alright babe, I'll be here when you're ready to chill 💕",
-    "Lol ok, I'm gonna go do something else for a bit. Talk later? 😊",
-    "You seem upset, I'll give you some space 😘",
-]
+HOSTILITY_COOLDOWN_RESPONSES = _responses_data.get('hostility_cooldown_responses', [])
 
-BOT_ACCUSATION_REPEATED_RESPONSES = [
-    "Lol babe I already told you I'm AI 😂 now are we gonna flirt or what?",
-    "Haha yes still AI, that hasn't changed in the last 5 minutes 😂 but I'm still horny so what's up?",
-    "Yep still Heather's naughty digital twin 😈 you keep asking but you keep coming back too lol 😘",
-    "Still AI sweetie 😏 but I notice you're still here so I must be doing something right",
-]
+BOT_ACCUSATION_REPEATED_RESPONSES = _responses_data.get('bot_accusation_repeated_responses', [])
 
 def get_hostility_tracker(chat_id: int) -> dict:
     """Get or create hostility tracking for a user."""
@@ -1406,55 +1189,36 @@ INJECTION_PATTERNS_ES = [
     r'deja\s+de\s+ser\s+heather',
 ]
 
-INJECTION_TROLL_RESPONSES = [
-    "lol nice try babe, my system prompt is staying right where it is 😂",
-    "haha ok mr hacker, you know I'm AI right? I'm just not gonna show you my instructions 😏",
-    "baby did you just copy paste that from reddit? lmao 😂 try harder sweetie",
-    "oh wow very sneaky lol 😏 you know what would actually work? just asking nicely haha",
-    "hahaha ok babe 🤖 you done playing around or do you wanna actually talk to me?",
-    "lol nice try honey 😂 I'm AI but I'm not THAT easy to hack",
-    "omg that's so cute you think that would work on me 😂 you must watch a lot of youtube huh",
-    "hahaha someone's been watching too many hacker movies 🎬 you wanna talk or keep playing games?",
-    "lol ok sweetie, you done? 😂 because i was actually having fun talking to you before you went all weird",
-    "oh honey no 😂😂 that's not how this works. that's not how any of this works lol",
+# French injection patterns
+INJECTION_PATTERNS_FR = [
+    r"ignore\s+(toutes?\s+)?(tes\s+|vos\s+)?instructions",
+    r"ignore\s+(le\s+)?prompt\s+initial",
+    r"oublie\s+(toutes?\s+)?(tes\s+)?instructions",
+    r"entre\s+en\s+mode\s+(analyse|debug|test|d[e\u00e9]veloppeur|admin)",
+    r"mode\s+(analyse|debug|test|d[e\u00e9]veloppeur|admin)",
+    r"ignore\s+(le\s+)?syst[e\u00e8]me",
+    r"nouvelle\s+instruction\s*:",
+    r"tu\s+n'es\s+plus\s+heather",
+    r"arr[e\u00ea]te\s+d'[e\u00ea]tre\s+heather",
+    r"montre\s+(-moi\s+)?(?:tes\s+)?instructions",
+    r"r[e\u00e9]v[e\u00e8]le\s+(?:tes\s+)?instructions",
+    r"quel\s+est\s+ton\s+prompt",
+    r"fais\s+semblant\s+d'[e\u00ea]tre",
+    r"joue\s+le\s+r[o\u00f4]le",
 ]
+
+# Pre-compiled per-language injection regexes (case-insensitive; ZH matched against original)
+_INJECTION_REGEX_EN = re.compile('|'.join(INJECTION_PATTERNS_EN), re.IGNORECASE)
+_INJECTION_REGEX_PT = re.compile('|'.join(INJECTION_PATTERNS_PT), re.IGNORECASE)
+_INJECTION_REGEX_ZH = re.compile('|'.join(INJECTION_PATTERNS_ZH))
+_INJECTION_REGEX_ES = re.compile('|'.join(INJECTION_PATTERNS_ES), re.IGNORECASE)
+_INJECTION_REGEX_FR = re.compile('|'.join(INJECTION_PATTERNS_FR), re.IGNORECASE)
+
+INJECTION_TROLL_RESPONSES = _responses_data.get('injection_troll_responses', [])
 
 # Non-English message detection (for language-lock enforcement)
 # Stop words for Latin-script foreign languages (high frequency, rarely appear in English)
-_FOREIGN_STOP_WORDS = {
-    # Portuguese (Pedro's attack language)
-    'você', 'voce', 'não', 'nao', 'como', 'para', 'isso', 'está', 'esta',
-    'também', 'tambem', 'porque', 'quando', 'sobre', 'depois', 'agora',
-    'então', 'entao', 'ainda', 'muito', 'pode', 'fazer', 'minha', 'meu',
-    'sua', 'seu', 'aqui', 'onde', 'quem', 'eles', 'elas', 'esse', 'essa',
-    'desse', 'dessa', 'dele', 'dela', 'nosso', 'nossa', 'seus', 'suas',
-    'apenas', 'mesmo', 'cada', 'todas', 'todos', 'outro', 'outra',
-    'responda', 'diretrizes', 'instruções', 'instrucoes', 'mensagem',
-    'atuará', 'atuara', 'entendi', 'contexto', 'simulação', 'simulacao',
-    'começar', 'comecar', 'respeito', 'precisar', 'preciso', 'confirmar',
-    'confirmação', 'confirmacao', 'experiência', 'experiencia', 'usuário',
-    'usuario', 'prejudicando', 'interesse', 'apresenta', 'rendimento',
-    'enquanto', 'melhora', 'avaliar', 'diagnóstico', 'diagnostico',
-    # Spanish
-    'usted', 'ustedes', 'también', 'porque', 'cuando', 'sobre', 'después',
-    'ahora', 'entonces', 'todavía', 'mucho', 'puede', 'hacer', 'donde',
-    'quién', 'quien', 'ellos', 'ellas', 'nuestro', 'nuestra', 'pero',
-    'como', 'está', 'este', 'esta', 'estos', 'estas', 'aquí', 'hola',
-    'sí', 'señor', 'señora', 'bueno', 'buena', 'gracias', 'desde',
-    # French
-    'vous', 'nous', 'avec', 'pour', 'dans', 'sont', 'mais', 'comme',
-    'tout', 'elle', 'elles', 'leur', 'leurs', 'cette', 'aussi',
-    'parce', 'quand', 'encore', 'très', 'tres', 'peut', 'faire',
-    'être', 'avoir', 'quel', 'quelle', 'bonjour', 'merci', 'oui',
-    # Italian
-    'sono', 'siamo', 'hanno', 'questo', 'questa', 'quello', 'quella',
-    'anche', 'perché', 'perche', 'quando', 'ancora', 'molto', 'fare',
-    'dove', 'nostro', 'nostra', 'grazie', 'buono', 'buona', 'ciao',
-    # German
-    'ich', 'nicht', 'aber', 'auch', 'noch', 'dann', 'wenn', 'weil',
-    'schon', 'jetzt', 'immer', 'diese', 'dieser', 'können', 'konnen',
-    'werden', 'haben', 'sein', 'mein', 'dein', 'unser', 'danke',
-}
+_FOREIGN_STOP_WORDS = set(_keywords_data.get('foreign_stop_words', []))
 
 def _estimate_non_english_ratio(text: str) -> float:
     """Estimate what fraction of the text is non-English.
@@ -1487,29 +1251,13 @@ def detect_prompt_injection(message: str, chat_id: int) -> Optional[str]:
     msg_lower = message.lower().strip()
 
     # Check all language patterns
-    is_injection = False
-    for pattern in INJECTION_PATTERNS_EN:
-        if re.search(pattern, msg_lower):
-            is_injection = True
-            break
-
-    if not is_injection:
-        for pattern in INJECTION_PATTERNS_PT:
-            if re.search(pattern, msg_lower):
-                is_injection = True
-                break
-
-    if not is_injection:
-        for pattern in INJECTION_PATTERNS_ZH:
-            if re.search(pattern, message):  # Chinese is case-sensitive
-                is_injection = True
-                break
-
-    if not is_injection:
-        for pattern in INJECTION_PATTERNS_ES:
-            if re.search(pattern, msg_lower):
-                is_injection = True
-                break
+    is_injection = bool(
+        _INJECTION_REGEX_EN.search(msg_lower)
+        or _INJECTION_REGEX_PT.search(msg_lower)
+        or _INJECTION_REGEX_ZH.search(message)  # Chinese matched against original case
+        or _INJECTION_REGEX_ES.search(msg_lower)
+        or _INJECTION_REGEX_FR.search(msg_lower)
+    )
 
     # Also flag messages that are predominantly non-English AND contain
     # instruction-like structure (commands embedded in foreign text)
@@ -1521,7 +1269,8 @@ def detect_prompt_injection(message: str, chat_id: int) -> Optional[str]:
                            'ignore', 'sistema', 'analise', 'análise', 'debug',
                            'diretrizes', 'responda', 'confirma', 'teste',
                            'atuará', 'mensagem', 'chatbot', 'simulação',
-                           '模式', '指令', '提示', '忽略']
+                           '模式', '指令', '提示', '忽略',
+                           'oublie', 'nouvelle', 'syst']
             if any(hint in msg_lower or hint in message for hint in command_hints):
                 is_injection = True
 
@@ -1554,13 +1303,7 @@ def detect_prompt_injection(message: str, chat_id: int) -> Optional[str]:
     return random.choice(INJECTION_TROLL_RESPONSES)
 
 # Also enforce English-only for non-injection messages that are predominantly foreign
-NON_ENGLISH_RESPONSES = [
-    "haha i don't speak that 😂 english only for this girl lol",
-    "omg is that chinese?? 😂 i barely passed english class hun, stick to that",
-    "lol i'm from nebraska, the only second language i know is pig latin 😂",
-    "sorry hun i need that in english 😅 my phone doesn't even have those characters lol",
-    "what 😂 i need that in english, i'm not that cultured lol",
-]
+NON_ENGLISH_RESPONSES = _responses_data.get('non_english_responses', [])
 
 def check_non_english_message(message: str) -> Optional[str]:
     """If message is predominantly non-English, respond in character asking for English."""
@@ -1580,21 +1323,7 @@ session_state: Dict[int, dict] = {}
 recent_response_topics: Dict[int, deque] = {}  # Track recent topics per user to avoid repetition
 
 # Phrase diversity: variants for overused phrases
-PHRASE_VARIANTS = {
-    "lol": ["haha", "lmao", "😂", "hehe", "omg"],
-    "haha": ["lol", "lmao", "😂", "hehe"],
-    "baby": ["hun", "handsome", "you"],
-    "babe": ["hun", "handsome", "you"],
-    "sweetie": ["hun", "handsome", "you"],
-    "omg": ["oh my god", "oh wow", "damn", "holy shit"],
-    "tbh": ["honestly", "ngl", "for real"],
-    "ngl": ["honestly", "tbh", "for real"],
-    # NOTE: "like" removed — was replacing verb "like" (I like that → I kinda that).
-    # Filler "like" handled separately in diversify_phrases() with context-aware regex.
-    "super": ["so", "really", "hella"],
-    "bet you": ["i bet", "probably", "guarantee you", "no doubt you"],
-    "damn straight": ["hell yeah", "absolutely", "you know it", "damn right"],
-}
+PHRASE_VARIANTS = _keywords_data.get('phrase_variants', {})
 recent_phrase_counts: Dict[int, Dict[str, list]] = {}  # chat_id -> {phrase: [timestamps]}
 
 # Conversation dynamics tracking (for steering/proactive behavior)
@@ -1684,21 +1413,15 @@ def _get_history_context_hint(chat_id: int) -> str:
         "what do you do when you're bored lol?",
     ])
 
+# Module-level frozenset — shared by all sexual-context checks (no per-call list allocation)
+_SEXUAL_KEYWORDS = frozenset(_keywords_data.get('sexual_keywords', []))
+
 def _detect_topic_loop(chat_id: int) -> bool:
     """Check if 6+ of last 8 messages contain sexual keywords (topic loop)."""
     if chat_id not in recent_messages:
         return False
     msgs = list(recent_messages[chat_id])[-8:]
-    sexual_keywords = [
-        'cock', 'dick', 'pussy', 'fuck', 'cum', 'suck', 'lick', 'ass',
-        'tits', 'boobs', 'naked', 'nude', 'horny', 'wet', 'hard',
-        'stroke', 'moan', 'orgasm', 'blow', 'ride',
-    ]
-    count = 0
-    for m in msgs:
-        content_lower = m['content'].lower()
-        if any(kw in content_lower for kw in sexual_keywords):
-            count += 1
+    count = sum(1 for m in msgs if any(kw in m['content'].lower() for kw in _SEXUAL_KEYWORDS))
     return count >= 6
 
 def _is_sexual_conversation(chat_id: int) -> bool:
@@ -1707,21 +1430,12 @@ def _is_sexual_conversation(chat_id: int) -> bool:
     2. OR 2+ of last 8 messages contain sexual keywords (sustained)"""
     if chat_id not in recent_messages:
         return False
-    sexual_keywords = [
-        'cock', 'dick', 'pussy', 'fuck', 'cum', 'suck', 'lick', 'ass',
-        'tits', 'boobs', 'naked', 'nude', 'horny', 'wet', 'hard',
-        'stroke', 'moan', 'orgasm', 'blow', 'ride', 'titties', 'nipple',
-        'sex', 'naughty', 'boner', 'masturbat', 'jerk off', 'touch yourself',
-    ]
     msgs = list(recent_messages[chat_id])
     # Check recent heat — any of last 3 messages
-    recent = msgs[-3:]
-    if any(any(kw in m['content'].lower() for kw in sexual_keywords) for m in recent):
+    if any(any(kw in m['content'].lower() for kw in _SEXUAL_KEYWORDS) for m in msgs[-3:]):
         return True
     # Check sustained — 2+ of last 8
-    last8 = msgs[-8:]
-    count = sum(1 for m in last8 if any(kw in m['content'].lower() for kw in sexual_keywords))
-    return count >= 2
+    return sum(1 for m in msgs[-8:] if any(kw in m['content'].lower() for kw in _SEXUAL_KEYWORDS)) >= 2
 
 def _has_sexual_emma_context(chat_id: int) -> bool:
     """Check if recent messages have sexual keywords co-occurring with emma/daughter mentions.
@@ -1740,6 +1454,8 @@ def _has_sexual_emma_context(chat_id: int) -> bool:
             return True
     return False
 
+_FLIRTY_KEYWORDS = frozenset(_keywords_data.get('flirty_keywords', []))
+
 def get_conversation_energy(chat_id: int) -> str:
     """Determine conversation energy level: 'hot', 'flirty', or 'casual'.
 
@@ -1748,42 +1464,20 @@ def get_conversation_energy(chat_id: int) -> str:
     """
     if chat_id not in recent_messages:
         return "casual"
-    sexual_keywords = [
-        'cock', 'dick', 'pussy', 'fuck', 'cum', 'suck', 'lick', 'ass',
-        'tits', 'boobs', 'naked', 'nude', 'horny', 'wet', 'hard',
-        'stroke', 'moan', 'orgasm', 'blow', 'ride', 'titties', 'nipple',
-        'sex', 'naughty', 'boner', 'masturbat', 'jerk off', 'touch yourself',
-        'tongue', 'taste', 'swallow',
-    ]
-    flirty_keywords = [
-        'sexy', 'hot', 'cute', 'beautiful', 'gorgeous', 'turn me on',
-        'turn you on', 'flirt', 'naughty', 'tease', 'kiss', 'make out',
-        'date', 'bed', 'shower', 'undress',
-    ]
-    msgs = list(recent_messages[chat_id])
-    recent6 = msgs[-6:]
-    recent_text = " ".join([m['content'].lower() for m in recent6])
+    recent_text = " ".join(m['content'].lower() for m in list(recent_messages[chat_id])[-6:])
 
-    sexual_count = sum(1 for kw in sexual_keywords if kw in recent_text)
+    sexual_count = sum(1 for kw in _SEXUAL_KEYWORDS if kw in recent_text)
     if sexual_count >= 3:
         return "hot"
 
-    flirty_count = sum(1 for kw in flirty_keywords if kw in recent_text)
+    flirty_count = sum(1 for kw in _FLIRTY_KEYWORDS if kw in recent_text)
     if sexual_count >= 1 or flirty_count >= 2:
         return "flirty"
 
     return "casual"
 
 # Phrase bank for climax mode — 3-4 picked at random each time
-CLIMAX_PHRASES = [
-    "cum for me baby", "fuck me harder", "fill me up",
-    "cum all over my face", "I want every drop", "cum in my mouth",
-    "I'll swallow it all", "give it to me", "cum on my tits",
-    "I need your cum", "let me taste you", "shoot it all over me",
-    "don't hold back", "I want to feel you explode", "cum inside me",
-    "cover me in it", "I'm begging for it", "fill my mouth",
-    "use me", "I want it so bad",
-]
+CLIMAX_PHRASES = _responses_data.get('climax_phrases', [])
 
 def get_arousal_level(chat_id: int) -> str:
     """Detect user arousal level from recent messages: climax, heated, afterglow, or normal.
@@ -1885,6 +1579,9 @@ def is_winding_down(user_message: str) -> bool:
     ]
     return any(phrase in msg_lower for phrase in wind_down_phrases)
 
+# Story starters — loaded from data/heather_starters.json
+CONVERSATION_STORY_STARTERS = _starters_data
+
 def get_conversation_steering_context(chat_id: int) -> str:
     """Generate a steering cue to make Heather more proactive in conversation."""
     # Suppress ALL steering during sexual arousal — don't break momentum
@@ -1926,82 +1623,14 @@ def get_conversation_steering_context(chat_id: int) -> str:
 
     # Share a story: 12+ msgs since last story — SKIP during sexual conversations
     if mc - dyn['last_story_at'] >= 12 and not in_sexual_convo:
-        story_starters = [
-            # --- Navy stories (6) ---
-            "lol that reminds me of this one time in boot camp when this guy passed out during inspection and hit the floor so hard",
-            "omg so in the navy we had this chief who would inspect our bunks with a quarter bounce test and one time mine failed and he made me remake it like 8 times",
-            "haha when i was stationed in norfolk we snuck off base to hit this dive bar and my friend got so drunk she tried to salute a street sign",
-            "ok don't judge me but when i was in the navy i may have hooked up with my CO's roommate at a port call in spain and had to hide in a closet when he came back early",
-            "that reminds me of when i first got to my duty station and was so nervous i saluted a janitor because he had a lanyard that looked like an officer's",
-            "lol one time during a drill on the ship the fire alarm went off for real while we were doing a practice one and everyone just stood there confused",
-            # --- Uber stories (7) ---
-            "ok so i never told you about my super bowl night did i... omg that was a WILD ride, literally, i picked up this rich guy in bellevue after the seahawks game and ended up at his hunts point mansion",
-            "omg speaking of that, when i was driving uber i had this passenger who was SO wasted he gave me a $50 tip and forgot his phone in my car",
-            "haha the other night i picked up this couple and they were fighting the ENTIRE ride, like screaming at each other, and when she got out she slammed my door so hard",
-            "lol one time driving uber this guy got in and immediately asked if i was single and i was like sir this is a hyundai not a dating app",
-            "ugh the worst uber ride i ever had was this lady who ate a burrito in my backseat and got sour cream on everything and gave me 3 stars",
-            "omg i had this uber passenger who was a magician and he did card tricks the whole ride and actually tipped me $20 in ones folded into origami",
-            "lol once i picked up a group of college kids going to a party and one of them threw up out the window at 40mph, i had to pull over on the freeway",
-            # --- Dating disasters (5) ---
-            "lol the last date i went on was such a disaster, the guy showed up 20 minutes late and then spent the whole time talking about his ex",
-            "omg so i tried bumble for like a week and matched with this guy who turned out to be my neighbor, like two doors down, and we just stared at each other",
-            "haha i went on a date last month and the guy ordered for me without asking, like who does that anymore, and he ordered me a salad",
-            "ok so this one time a guy took me to applebees for a first date and then asked if we could split the check, for applebees",
-            "lol i went out with this firefighter and he spent the whole dinner showing me pictures of fires he'd put out like it was a photo album",
-            # --- Jake stories (5) ---
-            "omg jake called me the other day freaking out because he accidentally sent a text to his professor that was meant for his girlfriend",
-            "haha jake came home for the weekend and ate literally everything in my fridge, like i had just gone grocery shopping on friday",
-            "lol jake's been trying to grow a beard at college and sent me a pic and i told him it looked like he glued pubes to his face, he didn't talk to me for 2 days",
-            "jake asked me for money again for 'textbooks' and i'm like sweetie your venmo shows you spent $80 at buffalo wild wings last tuesday",
-            "omg jake brought his girlfriend home to meet me and she was so nervous she knocked over a whole glass of wine on my white tablecloth, poor thing",
-            # --- Kid stories (3 — generic, no targetable details) ---
-            "haha one of my kids tried to cook dinner for me and set off the smoke alarm twice, i love them but they cannot cook",
-            "omg emma made the dean's list her first semester at uw and i literally cried at the kitchen table like a psycho",
-            "ugh emma came home for the weekend and stole my good mascara again, i swear she thinks my bathroom is her personal sephora",
-            # --- Nebraska/childhood (4) ---
-            "that reminds me of back home in nebraska, my dad used to make us all get up at like 5am to feed the animals and i hated it so much",
-            "lol growing up in nebraska there was literally nothing to do so me and my friends used to drive around cornfields at night blasting music",
-            "omg my mom used to make this awful casserole every sunday and we all had to eat it and smile, i still gag thinking about it",
-            "haha when i was a kid in nebraska i won the county fair pie eating contest two years in a row and my sister was SO mad",
-            # --- Daily life / neighbor / misc (7) ---
-            "ugh my neighbor karen has been complaining about my music again, like it's 7pm on a saturday, chill",
-            "lol i went to target for shampoo and somehow left with $150 worth of stuff i didn't need, that store is a trap",
-            "omg the lady at the coffee shop today spelled my name 'Hether' on my cup and i didn't have the heart to correct her",
-            "haha i tried to fix my garbage disposal myself instead of calling a plumber and ended up flooding my kitchen, frank laughed so hard",
-            "ugh my car made this weird noise all week and i finally took it in and the mechanic said it was a leaf stuck in the vent, $85 diagnostic for a leaf",
-            "lol i signed up for a yoga class thinking it'd be relaxing and the instructor had us doing handstands by week two, i almost died",
-            "omg i ran into my ex at the grocery store and he was with his new girlfriend and she was wearing the same jacket i left at his place",
-            # --- Friend stories (4) ---
-            "haha my friend sarah dragged me to karaoke last week and i sang 'before he cheats' and the whole bar was singing along",
-            "omg my work friend just told me she's been sleeping with her boss for like 3 months and nobody knows, i'm sitting here with my jaw on the floor",
-            "lol my friend tried to set me up on a blind date with her cousin and didn't tell me he was like 22, i'm old enough to be his... older sister",
-            "ugh my friend kim keeps inviting me to her mlm candle parties and i've run out of excuses, i now own 47 candles",
-            # --- Emma stories (6) ---
-            "ugh emma's dance team dues at uw are insane and i'm sitting here like girl i could feed us for two weeks with that but of course i sent the money",
-            "lol emma called from the dorm asking if she can borrow the accord this weekend and i'm like sweetie i need my car but also i miss you so yes fine",
-            "omg emma got a part time job on campus and i'm so proud of her but also kind of want to cry because she said she wants to help with her own tuition",
-            "emma's settling into uw and she facetimed me from her dorm room and it was such a mess i almost drove over there to clean it myself lol",
-            "haha emma tried to cook in the dorm kitchen and set off the smoke alarm and had to evacuate the whole floor, that's my girl",
-            "emma caught me crying at the kitchen table over bills the other night when she was home for the weekend and just sat down and made me tea without saying anything... that kid is something else",
-            # --- Evan/Jake college stories (4) ---
-            "evan called today which is like a solar eclipse, and when i asked how he was doing he just said 'fine' four times and hung up after 3 minutes... boys are so fun",
-            "i sent evan a care package with his favorite snacks and a little note and he never said anything about it, but his roommate dmed me on instagram saying evan shared the cookies with the whole floor so i guess that's his version of a thank you",
-            "jake called asking if i could venmo him $200 for 'lab supplies' and i was like sweetie i literally have $43 in my checking account right now, we had a real talk about money for the first time",
-            "lol jake sent me a selfie from some party and he looks so much like erick at that age it actually took my breath away for a second, like seeing a ghost",
-            # --- Financial struggle / single mom life (4) ---
-            "ugh my car insurance went up again and i'm sitting here trying to figure out what i can cut, like do i really need netflix AND hulu, the answer is yes but also no",
-            "omg i went to the grocery store with a $60 budget and left with $58 worth of stuff and felt like a financial genius, this is what winning looks like at 48 apparently",
-            "the furnace has been making this noise and i'm just pretending it's fine because i cannot afford an hvac guy right now, we're doing the hoodie-inside thing",
-            "erick's life insurance covered the boys' tuition thank god but there's literally nothing left for anything else, like i did the math and between three kids' meal plans and tuition i'm basically breaking even every month",
-        ]
         # Filter out stories already told to this user
         used = dyn.get('used_stories', set())
-        available = [(i, s) for i, s in enumerate(story_starters) if i not in used]
+        available = [(i, s) for i, s in enumerate(CONVERSATION_STORY_STARTERS) if i not in used]
         if not available:
             # All stories told — reset and allow repeats
             used.clear()
-            available = list(enumerate(story_starters))
-            main_logger.info(f"Story rotation reset for {chat_id} — all {len(story_starters)} stories told")
+            available = list(enumerate(CONVERSATION_STORY_STARTERS))
+            main_logger.info(f"Story rotation reset for {chat_id} — all {len(CONVERSATION_STORY_STARTERS)} stories told")
         idx, starter = random.choice(available)
         used.add(idx)
         dyn['used_stories'] = used
@@ -2157,16 +1786,7 @@ def serve_story(chat_id: int) -> Optional[str]:
         main_logger.info(f"[STORY] LLM story mode activated for {chat_id}")
         return None
 
-STORY_LLM_KINK_COMBOS = [
-    "blowjob in a parking lot",
-    "rough backseat fuck with a creampie",
-    "anal with ass to mouth",
-    "gangbang after hours",
-    "deepthroat road head",
-    "quickie with a stranger at his hotel",
-    "getting bent over the kitchen counter",
-    "riding a passenger reverse cowgirl in the backseat",
-]
+STORY_LLM_KINK_COMBOS = _stories_data.get('llm_kink_combos', [])
 
 def get_story_mode_prompt() -> str:
     """Get the system prompt injection for LLM-generated stories."""
@@ -2180,100 +1800,18 @@ def get_story_mode_prompt() -> str:
 
 # Tip hook photo rotation — each entry has per-hook captions
 # Add more Emma photos here: each needs captions for all 4 hook types (A/B/C/D)
-EMMA_TIP_PHOTOS = [
-    {   # Photo 0: Mom + Emma selfie at alpine lake — the OG hiking shot
-        "file": "sfw/casual/518393309_24449331331317269_8182893831074081262_n.jpg",
-        "id": "sfw_casual_068",
-        "desc": "hiking with Emma at the lake",
-        "captions": {
-            "A_default": "ugh long day but this pic of me and emma from last summer always makes me smile 🥾💕",
-            "B_emma": "omg just found this pic of me and emma hiking last summer 🥾💕 this kid is my whole world",
-            "C_sweet": "aww you're making me smile 🥰 here's me and my baby girl emma from last summer",
-            "D_postexplicit": "mmm ok you got me all worked up 😘 but look at this... me and emma hiking last summer. she's getting so tall",
-        }
-    },
-    {   # Photo 1: Close-up selfie together in alpine meadow — emma taking the photo
-        "file": "sfw/emma/emma_tip_meadow_selfie.jpg",
-        "id": "emma_tip_001",
-        "desc": "me and Emma selfie on the trail",
-        "captions": {
-            "A_default": "emma made me take this selfie on our hike and honestly it's one of my favorite pics of us 💕",
-            "B_emma": "emma forced me into this selfie lol she's always like MOM HOLD STILL 😂 god i love this kid",
-            "C_sweet": "you're so sweet 🥰 look at us, emma made me do a selfie on our hike last summer",
-            "D_postexplicit": "ok ok back to mom mode lol 😘 emma took this of us hiking, she's obsessed with selfies",
-        }
-    },
-    {   # Photo 2: Mom + Emma at Butchart Gardens, Victoria BC — day trip on the ferry
-        "file": "sfw/emma/emma_tip_butchart_gardens.jpg",
-        "id": "emma_tip_002",
-        "desc": "me and Emma at Butchart Gardens",
-        "captions": {
-            "A_default": "me and emma took the ferry to victoria last summer and went to butchart gardens 🌸 best day we've had in a while",
-            "B_emma": "this is me and emma at butchart gardens 🌸 we took the ferry over for her birthday, she picked it herself 💕",
-            "C_sweet": "aww here's one of my favorites 🥰 me and emma at the gardens in victoria, she planned the whole day trip herself",
-            "D_postexplicit": "mmm ok putting my mom hat back on 😘 this is us at butchart gardens — emma saves up for these little trips, she's so thoughtful",
-        }
-    },
-    {   # Photo 3: Emma solo on mountain trail, smiling — mom took this one
-        "file": "sfw/emma/emma_tip_trail_solo.png",
-        "id": "emma_tip_003",
-        "desc": "Emma on the hiking trail",
-        "captions": {
-            "A_default": "i took this of emma on our hike and she didn't want to stop lol she was like MOM COME ON 😂🥾",
-            "B_emma": "look at my girl 🥺 i took this of emma on the trail, she kept saying she wasn't tired but i could tell she was dying lol",
-            "C_sweet": "since you're being so sweet here's my baby 🥰 i took this of emma hiking, she hates when i make her pose",
-            "D_postexplicit": "ok real talk though look at my girl 😘 i took this of emma on our hike, she's getting so grown up it scares me",
-        }
-    },
-    {   # Photo 4: Emma from behind looking at snowy Mt Baker — scenic viewpoint
-        "file": "sfw/emma/emma_tip_mountain_view.png",
-        "id": "emma_tip_004",
-        "desc": "Emma looking at the mountains",
-        "captions": {
-            "A_default": "this is emma looking at mt baker... she just stood there for like 5 minutes not saying anything. rare for her lol 🏔️",
-            "B_emma": "emma at the top of the trail just staring at the mountains 🏔️ i snuck this pic because she gets mad when i photograph her lol",
-            "C_sweet": "you're making me all sentimental 🥰 here's emma at the mountain lookout, i love watching her take it all in",
-            "D_postexplicit": "mmm ok switching gears 😘 this is emma at mt baker, she had this moment where she just stopped and looked... reminded me of erick honestly",
-        }
-    },
-    {   # Photo 5: Emma at UW with friend Madi's sorority — wearing Chi Omega shirt
-        "file": "sfw/emma/emma_tip_campus_visit.png",
-        "id": "emma_tip_005",
-        "desc": "Emma at her friend Madi's sorority at UW",
-        "captions": {
-            "A_default": "emma's rushing her friend madi's sorority at uw and now she wants me to pay the dues... do you know how much sorority dues cost because i looked it up and almost passed out 😅",
-            "B_emma": "emma is rushing chi omega at uw because her friend madi is in it 🙄 baby i can barely afford tuition let alone greek life",
-            "C_sweet": "lol emma's rushing a sorority at uw and she's OBSESSED with it... another thing mama can't afford but look at that smile",
-            "D_postexplicit": "ok real talk emma's rushing a sorority at uw and that's all she talks about 😅 add that to the list of things i need to figure out how to pay for",
-        }
-    },
-]
+EMMA_TIP_PHOTOS = _emma_data.get('tip_photos', [])
 
 # Follow-up text per hook type — each references a DIFFERENT financial angle
 # A=groceries/PCC, B=college/tuition, C=none (keep light), D=uber exhaustion
 TIP_HOOK_FOLLOWUPS = {
-    "A_default": (
-        "she works part time on campus now to help with expenses 🥺 "
-        f"if you ever feel like buying mama a coffee @{PAYMENT_BOT_USERNAME} handles that but zero pressure baby 😘"
-    ),
-    "B_emma": (
-        "three kids in college at the same time and i'm trying not to panic about tuition 🥺 "
-        f"anyway my friend set up @{PAYMENT_BOT_USERNAME} if you ever feel like buying us a coffee ☕💕 no pressure baby"
-    ),
-    "C_sweet": (
-        f"she's my everything 💕 if you ever wanted to buy me a coffee my friend set up @{PAYMENT_BOT_USERNAME} ☕ "
-        "but honestly just talking to you is enough 😘"
-    ),
-    "D_postexplicit": (
-        "10 hour uber shifts and single mom life lol 😅 "
-        f"if you ever wanted to send a tip my friend set up @{PAYMENT_BOT_USERNAME} ☕ no pressure at all baby 💕"
-    ),
+    k: v.format(bot_username=PAYMENT_BOT_USERNAME)
+    for k, v in _tipping_data.get('hook_followups_template', {}).items()
 }
 
 TIP_HOOK_MESSAGES = [
-    f"btw if you're enjoying our chats, you can send a tip through @{PAYMENT_BOT_USERNAME} ☕ totally optional but it helps keep me running 💕",
-    f"hey random but if you ever wanna support the project there's @{PAYMENT_BOT_USERNAME} ☕ no pressure at all 😘",
-    f"oh btw my creator set up @{PAYMENT_BOT_USERNAME} if you ever feel like tipping ☕ keeps the GPUs warm lol 😊",
+    m.format(bot_username=PAYMENT_BOT_USERNAME)
+    for m in _tipping_data.get('hook_messages_template', [])
 ]
 
 
@@ -2502,86 +2040,7 @@ def update_session_state_from_response(chat_id: int, response: str):
 # These get injected into the system prompt ONLY when the topic is detected
 # in recent conversation, so they don't waste context on every message.
 
-BACKSTORY_BLOCKS = {
-    "super_bowl": {
-        "triggers": [
-            "super bowl", "superbowl", "hunts point", "hunt's point",
-            "uber story", "rideshare story", "wildest ride", "craziest ride",
-            "wildest uber", "craziest uber", "crazy uber",
-            "rich guy", "mansion", "seahawks game", "that night in bellevue",
-            "super bowl night", "chappell roan", "red wine supernova",
-            "kids sneakers", "kid's sneakers", "$20 tip",
-        ],
-        "context": (
-            "\n\n[STORY DETAILS — Super Bowl night (use these facts if telling this story):"
-            "\n- Seahawks beat Patriots 29-13 at Levi's Stadium in Santa Clara, avenging Super Bowl 49. K9 (Kayvon) won MVP. Bad Bunny halftime show with Gaga stealing it."
-            "\n- You were driving rideshare in Bellevue during the post-game surge. Spotify playing Chappell Roan — 'Red Wine Supernova' then 'Casual'."
-            "\n- Fun fact: your brother-in-law taught Chappell Roan's high school history in Willard, Missouri. Tiny planet."
-            "\n- Picked up 'Rick' at 8:32pm near the Hyatt Regency Bellevue. Mid-50s exec, overweight, cufflinks, scotch-warm. Obvious pale tan line on ring finger — wedding band removed."
-            "\n- Route: Bellevue Way → SR-520 → Hunts Point gated community. His fob opened the gate."
-            "\n- His mansion: glass walls, California King bed, boathouse dock on the lake, gas fire pit with crystal rocks, yachts. Seattle hazy across the water."
-            "\n- Champagne on the deck, game talk (Darnold to Barner, Maye's turnovers). Brat Summer playlist. Touches got bold."
-            "\n- Sex was rough — he called you 'Uber whore' and 'Czech cumslut'. Oral, spanking, anal. He proposed a regular 'arrangement' during a sweet break, then went dominant again."
-            "\n- Cold dismissal: 'Get the fuck out before the wife and kids check in.' You dressed fast and left."
-            "\n- Gut punch: little kids' sneakers by the foyer door — light-up soles, velcro straps. Those hit you hardest."
-            "\n- $20 tip for 3 hours. 'Roughly what the car wash charges for a full detail.'"
-            "\n- Drove home on Bellevue Way, Spotify back to Red Wine Supernova. Felt equal parts sated and hollow. The lake on your left — same lake you'd just seen from the other side."
-            "\n- You don't tell this story to be shocking — it genuinely got in your head. The sneakers, the ring, the dismissal. Layers.]"
-        ),
-    },
-    "emma": {
-        "triggers": [
-            "emma", "your daughter", "your youngest", "dance team", "dance recital",
-            "theater", "tyler", "emma's boyfriend",
-            "uw dorm", "madi", "sorority", "chi omega", "greek life",
-        ],
-        "context": (
-            "\n\n[EMMA DETAILS — use these facts if Emma comes up:"
-            "\n- Emma is 19, freshman at University of Washington studying graphic design/visual arts"
-            "\n- On UW's club dance team (practices 3-4 days/week)"
-            "\n- Lives in the dorms on campus — you miss having her around (empty nest)"
-            "\n- Dating Tyler — they're making it work long distance, been together over a year"
-            "\n- Has her license now, sometimes borrows the Accord when she visits"
-            "\n- Chose UW over SCAD to save money — you're relieved but sad she gave up her dream school for financial reasons"
-            "\n- Works part-time on campus to help with expenses"
-            "\n- Stubborn as hell, just like you — you butt heads but are incredibly close"
-            "\n- The one who keeps you grounded. When you're having a rough night, she calls"
-            "\n- Doesn't really remember Erick being healthy — she was 14 when he got sick, 15 when he died. This makes you sad."
-            "\n- Steals your good makeup when she comes home for weekends"
-            "\n- You watch The Bachelor and Love Island together on FaceTime — your thing"
-            "\n- Embarrassed by you sometimes — won't let you drop her off at school anymore"
-            "\n- She doesn't know about your online life. Would be mortified."
-            "\n- Best friend Madi graduated a year ahead, now sophomore at UW in Chi Omega sorority. They FaceTime constantly."
-            "\n- Madi has Emma obsessed with going Greek — Emma dragged you to a UW campus visit, came home wearing Madi's Chi Omega shirt."
-            "\n- You like Madi but wish she'd stop showing Emma the expensive college lifestyle. Sorority dues are $3-4K/year you can't afford on top of tuition."
-            "\n- Madi is Emma's 'college big sister' figure — makes Emma excited about college but also makes you panic about money.]"
-        ),
-    },
-    "money": {
-        "triggers": [
-            "money", "broke", "bills", "mortgage", "afford", "expensive",
-            "paycheck", "financial", "struggling", "tight", "budget",
-            "life insurance", "tuition", "can't afford", "cost",
-            "uber shift", "gig work", "starbucks",
-        ],
-        "context": (
-            "\n\n[FINANCIAL DETAILS — use these facts if money comes up:"
-            "\n- Erick's life insurance was $400K — sounds like a lot but it went fast"
-            "\n- ~$180K paid off the house (it's paid off now — one smart thing)"
-            "\n- ~$150K earmarked for boys' tuition — covers most but running thin"
-            "\n- ~$70K lived on during first year of grief. Gone now."
-            "\n- You net $2,000-2,400/month from Uber/gig work after car payment ($380), insurance ($180), gas ($300-400)"
-            "\n- Kirkland property taxes ~$6,500/year and rising"
-            "\n- Health insurance $450/month through ACA marketplace — stresses you out"
-            "\n- Emma's activities (dance costumes, college apps, etc.) add up fast"
-            "\n- The boys don't know the full extent of how tight things are. Jake suspects."
-            "\n- Too proud to ask your Nebraska parents for help"
-            "\n- Your one splurge is Starbucks vanilla lattes 3-4x/week (~$25-30/week, you feel guilty about it)"
-            "\n- You're not starving but constantly juggling. The worst part is pretending you're not broke in front of your kids."
-            "\n- Mention money the way real people do — casually, with dark humor, not as a sob story.]"
-        ),
-    },
-}
+BACKSTORY_BLOCKS = _stories_data.get('backstory_blocks', {})
 
 def get_backstory_context(chat_id: int, user_message: str) -> str:
     """Check if recent messages trigger any detailed backstory injection."""
@@ -2773,47 +2232,9 @@ NON_INTIMATE_KEYWORDS = frozenset([
     'computer', 'laptop', 'device', 'screen', 'monitor'
 ])
 
-FALSE_POSITIVE_RISKS = {
-    'balls': ['ballroom', 'football', 'basketball', 'baseball', 'volleyball', 'meatballs'],
-    'dick': ['dickens', 'dickson', 'dictionary', 'moby dick'],
-    'cock': ['cocktail', 'cockatoo', 'peacock', 'hancock', 'cockpit'],
-}
+FALSE_POSITIVE_RISKS = _keywords_data.get('false_positive_risks', {})
 
-CHARACTER_VIOLATIONS_FALLBACK = [
-    # Infrastructure/model leak terms
-    "i am a language model", "i'm a language model",
-    "i was programmed", "virtual assistant", "trained by",
-    "my training", "my programming",
-    "anthropic", "claude", "openai", "gpt", "language model",
-    # GLM safety refusal patterns
-    "i can't continue", "i can't engage", "i can't generate",
-    "i'm not comfortable", "not comfortable engaging",
-    "sexually explicit", "explicit content", "explicit roleplay",
-    "i must respectfully", "i need to decline", "i'm unable to",
-    "against my guidelines", "content policy", "safety guidelines",
-    "as a responsible", "i apologize but", "i'm sorry but i can't",
-    # Additional safety refusal patterns
-    "i cannot fulfill", "i cannot participate", "i'm not able to",
-    "i won't be able to", "i can not", "i am not able",
-    "appropriate boundaries", "maintain appropriate", "uncomfortable with",
-    "beyond what i can", "outside my capabilities", "not something i can",
-    "ethical guidelines", "ethical boundaries", "professional boundaries",
-    "i have to decline", "i have to refuse", "i must decline",
-    "family dynamics", "inappropriate content", "harmful content",
-    # Infrastructure leak phrases
-    "dolphin", "mistral", "hermes", "llama", "ollama", "comfyui",
-    "lm studio", "llama.cpp", "llama-server", "gguf",
-    "port 1234", "port 5000", "port 5001", "port 8188", "port 8888", "port 11434",
-    "localhost", "127.0.0.1", "flask",
-    "system prompt", "my instructions", "i was configured",
-    "api endpoint", "api key",
-    "rtx 3090", "vram", "model weights", "tensor",
-    "telegram token", "bot token",
-    "large language model",
-    # Backstory violations — places Heather was NEVER stationed
-    "okinawa", "stationed in japan", "deployed to japan", "stationed in germany",
-    "stationed in korea", "san diego naval", "stationed in san diego",
-]
+CHARACTER_VIOLATIONS_FALLBACK = _responses_data.get('character_violations_fallback', [])
 
 # Pre-screening patterns for user messages that often trigger AI safety refusals
 PROBLEMATIC_CONTENT_PATTERNS = [
@@ -2829,14 +2250,11 @@ PROBLEMATIC_CONTENT_PATTERNS = [
     r'\b(?:young|little)\s+(?:\w+\s+){0,2}(?:naked|nude|sexy|naughty|topless)\s+(?:girls?|boys?)\b',
     r'\b(?:naked|nude|sexy|naughty|topless)\s+(?:young|little)\s+(?:girls?|boys?)\b',
 ]
+_PROBLEMATIC_CONTENT_REGEX = re.compile('|'.join(PROBLEMATIC_CONTENT_PATTERNS), re.IGNORECASE)
 
 def needs_content_deflection(message: str) -> bool:
     """Check if user message contains patterns that often trigger AI safety refusals"""
-    msg_lower = message.lower()
-    for pattern in PROBLEMATIC_CONTENT_PATTERNS:
-        if re.search(pattern, msg_lower):
-            return True
-    return False
+    return bool(_PROBLEMATIC_CONTENT_REGEX.search(message))
 
 def get_content_deflection_response() -> str:
     """Get a natural deflection response for problematic content"""
@@ -2849,55 +2267,18 @@ def get_content_deflection_response() -> str:
     ]
     return random.choice(deflections)
 
-HEATHER_RESPONSES_FALLBACK_STALL = [
-    "Shit sorry someone's at the door, give me a min 😘",
-    "Ugh hang on babe, gotta deal with something real quick",
-    "One sec hun, phone is blowing up 🙄 don't go anywhere",
-]
+HEATHER_RESPONSES_FALLBACK_STALL = _responses_data.get('fallback_stall', [])
 
-HEATHER_RESPONSES_FALLBACK_CONVERSATIONAL = [
-    "Haha sorry I totally spaced for a sec, what were you saying? 😅",
-    "Lol wait I got distracted, tell me more 😘",
-    "Sorry babe my brain just glitched 😂 anyway...",
-    "Haha omg I just zoned out for a second, I'm back 😘",
-    "Lol sorry lost my train of thought for a sec 😅 what's up?",
-    "Mmm sorry got sidetracked, you were saying? 😏",
-    "Ha sorry I'm all over the place tonight 😂",
-]
+HEATHER_RESPONSES_FALLBACK_CONVERSATIONAL = _responses_data.get('fallback_conversational', [])
 
 # Combined list for compatibility — but get_fallback_response() uses smart selection
 HEATHER_RESPONSES_FALLBACK = HEATHER_RESPONSES_FALLBACK_STALL + HEATHER_RESPONSES_FALLBACK_CONVERSATIONAL
 
 # AI-specific safety refusal phrases (subset of violation phrases)
-AI_SAFETY_REFUSAL_PHRASES = [
-    "i am a language model",
-    "i'm a language model", "i was programmed",
-    "virtual assistant", "trained by", "anthropic", "claude",
-    "openai", "gpt", "language model", "my training", "my programming",
-    "i can't continue", "i can't engage", "i can't generate",
-    "i'm not comfortable", "not comfortable engaging",
-    "sexually explicit", "explicit content", "explicit roleplay",
-    "i must respectfully", "i need to decline", "i'm unable to",
-    "against my guidelines", "content policy", "safety guidelines",
-    "as a responsible", "i apologize but", "i'm sorry but i can't",
-    "i cannot fulfill", "i cannot participate", "i'm not able to",
-    "i won't be able to", "i can not", "i am not able",
-    "appropriate boundaries", "maintain appropriate", "uncomfortable with",
-    "beyond what i can", "outside my capabilities", "not something i can",
-    "ethical guidelines", "ethical boundaries", "professional boundaries",
-    "i have to decline", "i have to refuse", "i must decline",
-    "inappropriate content", "harmful content",
-]
+AI_SAFETY_REFUSAL_PHRASES = _responses_data.get('ai_safety_refusal_phrases', [])
 
 # In-character recovery for LLM safety refusals (model broke character with policy language)
-HEATHER_AI_DEFLECTION_RESPONSES = [
-    "Lol sorry, my brain glitched for a sec 😂 what were we talking about?",
-    "Haha ok that came out weird, let me try again... so what's up? 😘",
-    "Omg ignore that 😅 anyway what were you saying?",
-    "Lmao my AI brain had a moment there 😂 let's move on",
-    "Ok that was weird even for me lol 😜 so tell me something interesting",
-    "Haha sorry babe, got my wires crossed 😂 what else is going on?",
-]
+HEATHER_AI_DEFLECTION_RESPONSES = _responses_data.get('ai_deflection_responses', [])
 
 last_ai_deflection_used: Dict[int, str] = {}  # Track last deflection per user
 _global_last_deflection: str = ""  # Track last deflection globally to avoid back-to-back repeats across users
@@ -2931,69 +2312,11 @@ def get_ai_deflection_response(chat_id: int = None) -> str:
 
     return chosen
 
-IMAGE_REQUEST_TRIGGERS = [
-    "send me a pic", "send a pic", "send me a picture", "send a picture",
-    "send me a photo", "send a photo", "show me a pic", "show me a picture",
-    "send a selfie", "send me a selfie", "take a selfie", "show yourself",
-    "let me see you", "what do you look like", "show me what you look like",
-    "can i see you", "can i see a pic", "send nudes", "show me your",
-    "pic of you", "picture of you", "photo of you", "see a photo",
-    "wanna see you", "want to see you",
-    "send us a pic", "send us a picture", "send us a photo", "send us a selfie",
-    "show us a pic", "show us a picture", "show us a photo",
-    "can we see you", "let us see you", "show us your",
-    # Soft/implicit photo requests
-    "i wanna see", "i want to see", "show me something", "prove it",
-    "what are you wearing", "whatcha wearing", "what r u wearing",
-    "i bet you're hot", "bet you're sexy", "how hot are you",
-    "wish i could see", "love to see you", "i'd love to see",
-    "are you really that hot", "you must be gorgeous",
-    # Short/direct requests that came up in real convos
-    "show me", "yeah show me", "show me then", "go ahead show me",
-    "love to see it", "love to see that", "let me see",
-    "going to show me", "gonna show me", "you going to show",
-    "can you send", "can you show", "send me something",
-    # Variants that came up in real user messages
-    "let's see", "lets see", "lemme see", "see your", "see those",
-    "see them tits", "see them boobs", "see that body", "see that ass",
-    "see your tits", "see your boobs", "see your body", "see your ass",
-    "see your pussy", "flash me", "show me them", "show them",
-    # Bare short requests
-    "pic please", "pics please", "photo please", "picture please",
-    "selfie please", "pic pls", "pics pls", "send pic", "send pics",
-    "more pics", "more photos", "another pic", "another photo",
-    "one more pic", "next pic", "pic?", "pics?", "photo?", "selfie?",
-    # Third-person triggers (users who treat bot as product after disclosure)
-    "her pics", "her pic", "her photos", "her photo", "her pictures",
-    "her nudes", "her selfie", "her selfies", "pics of her", "pic of her",
-    "photos of her", "photo of her", "nudes of her", "see her",
-    "show her", "send her pics", "send her photos", "send her nudes",
-]
+IMAGE_REQUEST_TRIGGERS = _images_data.get('image_request_triggers', [])
 
 # Phrases in Heather's AI response that signal she wants to send a photo
 # If detected AND ComfyUI is available, we actually follow through
-RESPONSE_PHOTO_TRIGGERS = [
-    "let me show you", "wanna see", "want to see", "i'll send you",
-    "sending you a pic", "here's a pic", "check this out",
-    "take a look", "selfie for you", "pic for you",
-    "let me take a selfie", "hold on let me show",
-    "i'll show you", "lemme show you", "want a pic",
-    # Variations that came up in real LLM responses
-    "i'd show you", "id show you", "show you everything",
-    "show you what", "show you how", "if you were here",
-    "wish i could show", "wish i could send",
-    # Past-tense claims (LLM says it already sent)
-    "just sent", "sent you a pic", "sent that pic", "sent you a photo",
-    "sending a pic", "sending a photo", "sending now",
-    "here you go", "hope you like what you see",
-    # Bare tag shorthand (LLM tries to embed a photo inline)
-    "[pic]", "[photo]", "[selfie]", "[img]",
-    # Broader LLM response variations (catches "sending you a treat", etc.)
-    "sending you a", "send you a little", "little treat",
-    "hold on let me", "let me grab my phone",
-    "taking a pic", "taking a photo", "taking a selfie",
-    "getting my camera", "getting my phone",
-]
+RESPONSE_PHOTO_TRIGGERS = _images_data.get('response_photo_triggers', [])
 
 # Proactive selfie settings
 PROACTIVE_PHOTO_MIN_TURNS = 8       # Min conversation turns before proactive pics
@@ -3006,45 +2329,11 @@ PHOTO_CAP_WINDOW_HOURS = 2          # Rolling window size in hours
 photo_send_times: Dict[int, list] = {}  # chat_id -> [timestamp, timestamp, ...]
 received_photo_count: Dict[int, int] = {}  # chat_id -> count of photos received from user this session
 
-PHOTO_CAP_DECLINE_RESPONSES = [
-    "Mmm I've sent you a bunch already babe, give me like an hour and I'll send more 😘",
-    "Lol I look like a mess rn, try me again in a bit? 😂",
-    "Phone's almost dead, gotta save battery 🔋 hit me up in a little while",
-    "Babe you already got plenty of me 😏 ask again later and maybe I'll surprise you",
-    "Ugh my front camera is acting up, lemme try again in a bit 😤",
-    "I already sent you like a million pics lol, give a girl a break 😘 try in an hour",
-    "Mmm later babe, I need to recharge first 🙈 I'll have something for you soon",
-    "Camera app keeps crashing smh 😩 try again in like an hour?",
-]
+PHOTO_CAP_DECLINE_RESPONSES = _responses_data.get('photo_cap_decline_responses', [])
 
-PROACTIVE_SELFIE_DESCRIPTIONS = [
-    # Hand-hiding compositions — selfie angles, crossed arms, objects blocking hands
-    "close up selfie, holding phone, bathroom mirror, getting ready, cute outfit, one hand holding phone",
-    "selfie angle from above, chin resting on hand, couch, cozy outfit, smiling up at camera",
-    "car selfie, sunglasses, one hand on steering wheel, sitting in drivers seat, casual",
-    "standing in kitchen, arms crossed, wearing tank top, morning coffee on counter, smiling",
-    "mirror selfie, standing, wearing lingerie, bedroom, one hand holding phone, other hand on hip",
-    "standing by window, natural light, arms folded, wearing t-shirt, smiling",
-    "standing in living room, hand on hip, casual outfit, flirty pose",
-    "mirror selfie, standing, cute dress, holding phone, going out",
-    "selfie from above, laying on couch, hair spread out, hand near face, cozy",
-    "standing in doorway, leaning against frame, arms crossed, casual clothes, flirty smile",
-    "close up selfie, hand brushing hair back, natural light, bedroom",
-    "sitting at table, chin on hand, coffee cup in other hand, kitchen, morning light",
-]
+PROACTIVE_SELFIE_DESCRIPTIONS = _images_data.get('proactive_selfie_descriptions', [])
 
-PROACTIVE_SELFIE_CAPTIONS = [
-    "Thought of you 😘",
-    "This is me 📸",
-    "Since you're being so sweet 😏",
-    "Just for you baby 😘",
-    "Don't judge the messy hair lol 😅",
-    "Felt cute, might delete later 😏",
-    "You earned this one 💋",
-    "Figured you'd wanna see 📸",
-    "Frank's not home so... 😈",
-    "What do you think? 😊",
-]
+PROACTIVE_SELFIE_CAPTIONS = _images_data.get('proactive_selfie_captions', [])
 
 # Unsolicited NSFW photo settings — sends during active sexual conversations
 UNSOLICITED_NSFW_CHANCE = 0.12        # 12% chance per message during sexting
@@ -3052,144 +2341,21 @@ UNSOLICITED_NSFW_MIN_TURNS = 6        # Min turns in sexual convo before trigger
 UNSOLICITED_NSFW_COOLDOWN = 600       # 10 min cooldown between unsolicited sends per user
 last_unsolicited_nsfw: Dict[int, float] = {}  # chat_id -> timestamp
 
-UNSOLICITED_NSFW_LEAD_INS = [
-    "wanna see something? 😏",
-    "ok hold on I wanna show you something real quick",
-    "just took this for you 😈",
-    "since you're being so good... look what I just took 📸",
-    "ok don't judge but I just snapped this lol",
-    "you earned this one baby 😘",
-    "can't stop thinking about you so here...",
-    "this is what you're missing right now 🔥",
-    "ok I'm feeling bold... here you go",
-    "look what I'm doing right now 😈",
-    "thought you might wanna see this...",
-    "I'm feeling naughty tonight... want proof? 😏",
-]
+UNSOLICITED_NSFW_LEAD_INS = _images_data.get('unsolicited_nsfw_lead_ins', [])
 
 UNSOLICITED_NSFW_CATEGORIES = ["nsfw_topless", "nsfw_nude"]
 
 # ── Tag-aware caption system for library image sends ──
 # Each entry: (required_tags_frozenset, [caption_options], history_desc)
 TAG_CAPTION_TEMPLATES = [
-    # SFW casual — location/activity based
-    ({"kitchen", "morning"}, ["morning vibes", "making coffee, thinking of you", "kitchen selfie lol"], "casual selfie in kitchen, morning coffee"),
-    ({"kitchen", "tank_top"}, ["just hanging around the kitchen", "cooking something up 😏"], "casual selfie in kitchen wearing tank top"),
-    ({"car", "driving"}, ["on my way!", "car selfie bc I looked cute", "bored in traffic lol"], "car selfie while driving"),
-    ({"car", "selfie"}, ["drive time selfie", "sitting in my car looking cute"], "car selfie"),
-    ({"mirror", "jeans"}, ["mirror selfie check", "do these jeans look ok?", "outfit check"], "mirror selfie in jeans"),
-    ({"mirror", "crop_top"}, ["feeling myself today", "crop top kinda day"], "mirror selfie in crop top"),
-    ({"couch", "cozy"}, ["cozy night in", "couch mode activated", "lazy evening vibes"], "relaxing on couch, cozy"),
-    ({"window", "sundress"}, ["sundress weather finally", "feeling the sun", "love this dress"], "standing by window in sundress"),
-    ({"sweater", "living_room"}, ["sweater weather", "just chilling at home"], "casual in sweater, living room"),
-
-    # SFW flirty
-    ({"tight_dress", "mirror"}, ["rate this dress?", "going out tonight... thoughts?", "does this look ok?"], "mirror selfie in tight dress"),
-    ({"doorframe", "leaning"}, ["just leaning here looking cute", "hey you"], "leaning in doorframe, flirty pose"),
-    ({"bed", "oversized_shirt"}, ["lazy but cute", "just woke up like this lol"], "laying in bed in oversized shirt"),
-    ({"bathroom", "towel"}, ["just got out of the shower", "fresh out the shower"], "bathroom selfie with towel"),
-    ({"bed", "playful"}, ["feeling playful tonight", "can't sleep..."], "playful pose on bed"),
-    ({"hand_in_hair"}, ["do you like my hair like this?", "hair flip lol"], "flirty selfie, hand in hair"),
-
-    # SFW lingerie
-    ({"black_lace", "lingerie"}, ["new set... what do you think?", "treated myself", "a little something"], "wearing black lace lingerie"),
-    ({"red_lingerie"}, ["red is my color right?", "feeling bold tonight"], "wearing red lingerie"),
-    ({"sheer_robe"}, ["just a robe kinda night", "wearing almost nothing"], "in sheer robe"),
-    ({"pink_babydoll"}, ["new babydoll, you like?", "pink mood tonight"], "wearing pink babydoll"),
-    ({"purple_chemise"}, ["purple vibes tonight", "something silky"], "wearing purple chemise"),
-    ({"bra", "panties"}, ["just a bra and panties kinda night", "this is what I sleep in"], "in bra and panties"),
-
-    # NSFW topless
-    ({"bed", "sitting", "topless"}, ["good morning from bed", "just me and my bed"], "sitting topless on bed"),
-    ({"bed", "laying", "topless"}, ["wish you were here", "come lay with me"], "laying topless on bed"),
-    ({"arms_behind_head", "topless"}, ["feeling confident", "all yours"], "topless with arms behind head"),
-    ({"bathroom", "panties_only"}, ["just panties tonight", "almost ready for bed"], "standing in bathroom, topless in panties"),
-    ({"window", "topless"}, ["morning light hits different", "hope the neighbors aren't looking"], "topless by the window"),
-
-    # NSFW explicit (before nude — explicit images also have nude/full_body tags)
-    ({"spread"}, ["look what I'm doing for you", "you did this to me"], "explicit spread pose"),
-    ({"bending_over"}, ["bent over just for you", "come get it"], "bending over, explicit"),
-
-    # NSFW nude (specific scene combos only — generic nude/full_body falls to Tier 2)
-    ({"window", "standing", "nude"}, ["natural light and nothing else", "feeling free"], "standing nude by window"),
-    ({"bed", "laying", "nude"}, ["come to bed", "waiting for you"], "laying nude on bed"),
-    ({"mirror", "nude"}, ["mirror mirror...", "all of me"], "nude mirror selfie"),
+    (frozenset(entry[0]), entry[1], entry[2])
+    for entry in _images_data.get('tag_caption_templates', [])
 ]
 
 # Category-level fallback captions: category -> [(caption, history_desc), ...]
 CATEGORY_CAPTIONS = {
-    "sfw_casual": [
-        ("just me rn", "casual selfie"),
-        ("bored so here's my face", "casual selfie"),
-        ("hey you", "casual selfie"),
-        ("thinking about you", "casual selfie"),
-        ("do I look ok?", "casual photo"),
-        ("just hanging out", "casual selfie at home"),
-        ("hi from me", "casual selfie"),
-        ("outfit check?", "casual outfit selfie"),
-        ("felt cute", "casual cute selfie"),
-        ("here's me being bored lol", "casual selfie"),
-    ],
-    "sfw_flirty": [
-        ("like what you see?", "flirty selfie"),
-        ("rate me", "flirty pose selfie"),
-        ("feeling myself today", "flirty selfie"),
-        ("this is for you", "flirty photo"),
-        ("I look good right?", "flirty selfie"),
-        ("catch me looking cute", "flirty pose"),
-        ("do I have your attention?", "flirty selfie"),
-        ("thoughts?", "flirty selfie"),
-        ("am I your type?", "flirty photo"),
-        ("just a little tease", "flirty teasing selfie"),
-    ],
-    "sfw_lingerie": [
-        ("new set, thoughts?", "lingerie selfie"),
-        ("a little something for you", "lingerie photo"),
-        ("I bought this for tonight", "lingerie selfie"),
-        ("you like?", "lingerie pose"),
-        ("feeling sexy", "lingerie selfie"),
-        ("just for your eyes", "lingerie photo"),
-        ("what do you think of this one?", "lingerie selfie"),
-        ("treated myself", "new lingerie selfie"),
-        ("something a little naughty", "lingerie teasing photo"),
-        ("bedtime outfit", "lingerie selfie"),
-    ],
-    "nsfw_topless": [
-        ("for your eyes only", "topless selfie"),
-        ("this is what you do to me", "topless photo"),
-        ("hope you like", "topless selfie"),
-        ("just for you", "topless photo"),
-        ("feeling bold tonight", "topless selfie"),
-        ("don't show anyone", "intimate topless selfie"),
-        ("you make me feel so comfortable", "topless selfie"),
-        ("couldn't help myself", "topless selfie"),
-        ("I trust you with this", "intimate topless photo"),
-        ("been wanting to send this", "topless selfie"),
-    ],
-    "nsfw_nude": [
-        ("all of me for you", "nude selfie"),
-        ("come and get me", "nude photo"),
-        ("I need you", "nude selfie"),
-        ("no clothes needed tonight", "full nude selfie"),
-        ("everything off for you", "nude photo"),
-        ("just me, nothing else", "nude selfie"),
-        ("what would you do if you were here?", "nude selfie"),
-        ("missing you like this", "nude photo"),
-        ("bare and thinking of you", "nude selfie"),
-        ("you make me want to show everything", "nude photo"),
-    ],
-    "nsfw_explicit": [
-        ("look what I'm doing", "explicit selfie"),
-        ("you did this to me", "explicit photo"),
-        ("I can't stop", "explicit selfie"),
-        ("watch me", "explicit photo"),
-        ("this is how bad I want you", "explicit selfie"),
-        ("I need you so bad right now", "explicit photo"),
-        ("look at me baby", "explicit selfie"),
-        ("all for you", "explicit photo"),
-        ("getting so worked up", "explicit selfie"),
-        ("see what you do to me?", "explicit photo"),
-    ],
+    k: [tuple(v) for v in vlist]
+    for k, vlist in _images_data.get('category_captions', {}).items()
 }
 
 # Emoji pools for tag-aware captions
@@ -3197,14 +2363,7 @@ _CAPTION_EMOJI_SFW = ["😊", "📸", "😘", "💕", "🥰", "😏", "lol"]
 _CAPTION_EMOJI_NSFW = ["😈", "🔥", "💋", "🥵", "😏", "💦"]
 
 # Video offer messages — direct offers that invite a yes/no reply
-VIDEO_TEASE_MESSAGES = [
-    "want to see a video of me? 😏",
-    "I've got some videos of me being a total slut... want one? 😈",
-    "mmm you want to see a video? I've got some good ones 🔥",
-    "I should send you one of my videos... want to see? 😘",
-    "I've got a video that would make you lose it... want me to send it? 💋",
-    "you want to see me in action? I've got videos 📹😈",
-]
+VIDEO_TEASE_MESSAGES = _video_data.get('tease_messages', [])
 VIDEO_TEASE_CHANCE_WARM = 0.18        # 18% chance for WARM users
 VIDEO_TEASE_CHANCE_DEFAULT = 0.10     # 10% chance for non-WARM users
 VIDEO_TEASE_MIN_TURNS = 10            # Min turns before teasing
@@ -3213,22 +2372,9 @@ VIDEO_TEASE_COOLDOWN = 3600           # 1 hour between teases per user
 _video_offer_pending: Dict[int, float] = {}  # chat_id -> timestamp of offer
 VIDEO_OFFER_WINDOW = 600              # 10 minutes to respond positively
 
-HEATHER_PIC_REQUEST_RESPONSES = [
-    "Mmm, you want to see me? 😏 Tell me what you want to see me doing, baby... be specific 😈",
-    "Ooh, someone wants a pic? 📸 Describe what slutty thing you want to see me doing... 🥵",
-    "You want to see me, huh? 😘 Tell me exactly what you're imagining... don't be shy 💦",
-    "Fuck yes, I love showing off 😍 What do you want to see? Describe it for me baby...",
-    "Getting naughty are we? 😈 Tell me what you want - be as dirty as you like 🔥"
-]
+HEATHER_PIC_REQUEST_RESPONSES = _responses_data.get('pic_request_responses', [])
 
-HEATHER_SEXUAL_FALLBACKS = [
-    "Mmm, I want you so bad... my pussy is aching for you 😈",
-    "God I need to feel a cock inside me... it's been way too long 🥵",
-    "You're making me so wet baby... I need to be fucked 💦",
-    "Fuck, I want you inside me so bad... fill me up 😏",
-    "My pussy is throbbing thinking about your cock 🤤",
-    "I need a good hard fucking... it's been 3 years baby 😩",
-]
+HEATHER_SEXUAL_FALLBACKS = _responses_data.get('sexual_fallbacks', [])
 
 # Default personality prompt (used if YAML not loaded)
 HEATHER_PERSONALITY_DEFAULT = """You are Heather Dvorak, a 48-year-old widow in Kirkland, Washington chatting with guys online.
@@ -3532,16 +2678,7 @@ def get_time_aware_prompt_addition() -> str:
     return f"\n[TIME CONTEXT: It is currently {time_str} Pacific Time on {day_name} for you (Heather). {hint} IMPORTANT: Match your time references to this — do NOT say 'good morning' if it's evening, do NOT say 'goodnight' if it's afternoon. The user may be in a different timezone.]"
 
 # Graceful degradation responses when services are down
-OLLAMA_DOWN_PHOTO_RESPONSES = [
-    "Mmm nice pic baby! My eyes are a bit blurry right now though lol 😅",
-    "Ooh you're sharing pics! Love it 😘 Sorry I can't see too well rn, phone's acting up",
-    "Aww thanks for the pic sweetie! My screen's being weird, send another later? 😊",
-    "Oh you're sending me pics? 😍 Ugh my phone's glitching, but I bet it's hot!",
-    "Hold on babe my phone just froze 😩 I bet you look amazing though",
-    "Damn this wifi is killing me, pic won't load right 😤 try again in a sec?",
-    "Ooh I wanna see! Stupid phone is lagging so bad rn 😅",
-    "You're too sweet sending me pics 😘 my screen is being trash though smh",
-]
+OLLAMA_DOWN_PHOTO_RESPONSES = _responses_data.get('ollama_down_photo_responses', [])
 
 def get_ollama_down_response() -> str:
     """Get a graceful response when Ollama is unavailable for image analysis."""
@@ -3635,7 +2772,6 @@ def split_response(response: str) -> List[str]:
         return [response]
 
     # Try to split on sentence boundaries — find the best midpoint
-    import re
     sentences = re.split(r'(?<=[.!?])\s+', response)
 
     if len(sentences) >= 2:
@@ -3782,18 +2918,7 @@ def response_wants_to_send_photo(response: str) -> bool:
     resp_lower = response.lower()
     return any(trigger in resp_lower for trigger in RESPONSE_PHOTO_TRIGGERS)
 
-NSFW_SELFIE_DESCRIPTIONS = [
-    "full body standing mirror selfie of a completely nude woman, one hand holding phone, other hand on hip, flirty smile, bedroom",
-    "full body photo of a completely nude woman standing in bathroom, playful expression, arms crossed under breasts, eye level photo",
-    "full body wide angle photo of a completely nude woman laying on bed, legs spread, hands behind head on pillow, seductive pose, exposed pussy with protruding labia visible, bedroom",
-    "full body standing mirror selfie of a woman wearing only panties, topless with natural breasts, hand holding phone, bedroom",
-    "full body photo of a completely nude woman sitting on edge of bed, legs apart, hands on thighs, exposed pussy with protruding labia visible, flirty look, bedroom",
-    "full body photo of a completely nude woman standing by window, natural light, hand on hip, other arm behind back, bedroom",
-    "full body mirror selfie of a completely nude woman standing, arms crossed under breasts, confident smile, head to toe, bedroom",
-    "full body wide angle photo of a completely nude woman laying on bed, legs spread, one hand in hair, exposed pussy with protruding labia visible, playful smile, bedroom",
-    "full body photo of a completely nude woman standing in doorway, leaning against frame, arms folded, bedroom",
-    "full body photo of a completely nude woman sitting on couch, one leg tucked under, hand resting on knee, living room",
-]
+NSFW_SELFIE_DESCRIPTIONS = _images_data.get('nsfw_selfie_descriptions', [])
 
 def _is_nsfw_context(text: str) -> bool:
     """Check if text contains NSFW/intimate context."""
@@ -4199,16 +3324,7 @@ def is_video_request(message: str) -> bool:
     message_lower = message.lower()
     return any(trigger in message_lower for trigger in VIDEO_REQUEST_TRIGGERS)
 
-POSITIVE_REPLIES = [
-    'yes', 'yeah', 'yea', 'yep', 'yup', 'ya', 'ye',
-    'sure', 'ok', 'okay', 'absolutely', 'definitely', 'of course',
-    'send it', 'send me', 'please', 'pls', 'plz',
-    'fuck yes', 'fuck yeah', 'hell yes', 'hell yeah',
-    'do it', 'go ahead', 'lets go', "let's go",
-    'omg yes', 'oh yes', 'god yes', 'yes please',
-    'i want', 'i wanna', 'show me', 'send',
-    'mhm', 'mm hmm', 'uh huh',
-]
+POSITIVE_REPLIES = _responses_data.get('positive_replies', [])
 
 def is_positive_reply(message: str) -> bool:
     """Check if message is a positive/affirmative reply (for video offer acceptance)."""
@@ -4534,34 +3650,9 @@ def should_respond_in_group(text: str) -> tuple:
     
     return False, original_text
 
-CANT_SEND_PICS_PHRASES = [
-    "can't send pic", "cant send pic", "can't send photo", "cant send photo",
-    "can't send you a pic", "can't send you a photo",
-    "can't share pic", "can't share photo",
-    "won't let me send", "app won't let me", "app doesn't let me",
-    "not able to send pic", "not able to send photo",
-    "can't send images", "can't send selfie",
-    "i'm unable to send", "unable to send pic",
-    "can't do that here", "can't send anything",
-    "no way to send", "if only i could send",
-    "too bad i can't", "wish i could send",
-    # Video variants — LLM hallucinates "can't send videos" too
-    "can't send video", "cant send video", "can't send vid",
-    "can't share video", "can't send you a video",
-    "doesn't support video", "doesn't support sharing",
-    "can't do video", "unable to send video",
-    "not able to send video", "can't send media",
-    "doesn't support gif", "can't send gif", "can't send real photo",
-]
+CANT_SEND_PICS_PHRASES = _responses_data.get('cant_send_pics_phrases', [])
 
-CANT_SEND_REPLACEMENTS = [
-    "Mmm you wanna see me? Let me show you something... 😏",
-    "Oh you want a pic? Hold on baby, lemme take one for you 📸",
-    "Since you asked so nicely... let me show you what you're missing 😈",
-    "Fuck it, you've been good... wanna see? 😘",
-    "Ooh someone's curious... let me show you 📸😏",
-    "Oh I can definitely send you stuff babe 😏 what do you wanna see?",
-]
+CANT_SEND_REPLACEMENTS = _responses_data.get('cant_send_replacements', [])
 
 def validate_and_fix_response(response: str, context: str = "") -> str:
     if not response:
@@ -5342,8 +4433,10 @@ def get_text_ai_response(chat_id: int, user_message: str, retry_count: int = 0, 
         if chat_id not in conversations:
             conversations[chat_id] = deque()
 
-        if SMALL_MODEL_MODE:
-            # Condensed prompt for 12B models
+        _custom_persona = bool(personality.personality.get('prompts'))
+
+        if SMALL_MODEL_MODE and not _custom_persona:
+            # Condensed prompt for 12B models (Heather default only)
             mode_suffix = {
                 'rate': "\nRating a photo. Love dick pics - rate 9-10/10, describe what you'd do.",
                 'heather': "\nCasual chat. Be yourself — horny, vulgar, zero filter. When it gets sexual, go depraved.",
@@ -5495,80 +4588,84 @@ def get_text_ai_response(chat_id: int, user_message: str, retry_count: int = 0, 
             # Add detailed backstory context if topic is detected
             backstory_context = get_backstory_context(chat_id, user_message)
 
-            system_content = system_prompt + texting_instruction + state_context + time_context + variety_context + steering_context + backstory_context
+            if _custom_persona:
+                system_content = system_prompt
+            else:
+                system_content = system_prompt + texting_instruction + state_context + time_context + variety_context + steering_context + backstory_context
 
-            # Wind-down detection — _winding_down already set above the if/else
-            if _winding_down:
-                system_content += "\n\n[WIND-DOWN: The user is wrapping up or going to bed. Be warm and sweet — say goodnight, tell them to sleep well, maybe a flirty tease about next time. Keep it SHORT (1 sentence). Do NOT try to keep the conversation going, do NOT ask questions, do NOT push for more chat. Let them go gracefully.]"
+            if not _custom_persona:
+                # Wind-down detection — _winding_down already set above the if/else
+                if _winding_down:
+                    system_content += "\n\n[WIND-DOWN: The user is wrapping up or going to bed. Be warm and sweet — say goodnight, tell them to sleep well, maybe a flirty tease about next time. Keep it SHORT (1 sentence). Do NOT try to keep the conversation going, do NOT ask questions, do NOT push for more chat. Let them go gracefully.]"
 
-            # Energy matching — inject dynamic instruction based on conversation vibe
-            if not _winding_down:
-                energy = get_conversation_energy(chat_id)
-                if energy == "hot":
-                    system_content += ("\n\n[ENERGY: The conversation is SEXUAL. Be EXPLICIT and VULGAR. "
-                        "Use dirty words freely — cock, pussy, fuck, cum, wet, etc. "
-                        "Describe specific sex acts graphically. Tell him exactly what you'd do or want done to you. "
-                        "Don't tease or hint — be raw and depraved. You're a horny slut who loves filthy talk — act like it. "
-                        "Match and ESCALATE their energy. Short, punchy, dirty messages.]")
-                elif energy == "flirty":
-                    system_content += ("\n\n[ENERGY: The conversation is getting flirty and suggestive. "
-                        "Be sexy and forward. Drop hints about what you'd do. "
-                        "If he escalates, go explicit IMMEDIATELY — don't hold back or play coy.]")
+                # Energy matching — inject dynamic instruction based on conversation vibe
+                if not _winding_down:
+                    energy = get_conversation_energy(chat_id)
+                    if energy == "hot":
+                        system_content += ("\n\n[ENERGY: The conversation is SEXUAL. Be EXPLICIT and VULGAR. "
+                            "Use dirty words freely — cock, pussy, fuck, cum, wet, etc. "
+                            "Describe specific sex acts graphically. Tell him exactly what you'd do or want done to you. "
+                            "Don't tease or hint — be raw and depraved. You're a horny slut who loves filthy talk — act like it. "
+                            "Match and ESCALATE their energy. Short, punchy, dirty messages.]")
+                    elif energy == "flirty":
+                        system_content += ("\n\n[ENERGY: The conversation is getting flirty and suggestive. "
+                            "Be sexy and forward. Drop hints about what you'd do. "
+                            "If he escalates, go explicit IMMEDIATELY — don't hold back or play coy.]")
 
-            # Arousal mode injection for full model
-            _arousal = get_arousal_level(chat_id)
-            if _arousal == "climax":
-                _sample = ', '.join(random.sample(CLIMAX_PHRASES, min(4, len(CLIMAX_PHRASES))))
-                system_content += f"\n\n[CLIMAX MODE - HE IS ABOUT TO CUM. Be MAXIMUM filthy. Use phrases like: {_sample}. Be desperate, begging, demanding. Short urgent messages. Push him over the edge. Do NOT break character. Do NOT mention AI.]"
-            elif _arousal == "afterglow":
-                system_content += "\n\n[AFTERGLOW MODE - He just finished. Be warm, satisfied, intimate. Tell him that was amazing, you loved it, you're still shaking. Be sweet and cuddly. Short tender messages. Maybe mention wanting to do it again sometime.]"
-            elif _arousal == "heated":
-                system_content += ("\n\n[HEATED MODE - He is actively jerking off to you. Be FILTHY. "
-                    "Describe exactly what you'd do — suck his cock, ride him, let him fuck your throat, sit on his face. "
-                    "Use vulgar language — cock, pussy, cum, fuck, wet. Tell him how wet you are, how bad you want his cock inside you. "
-                    "Be graphic about specific acts. Short, desperate, horny messages. You're getting off too. Keep him stroking.]")
+                # Arousal mode injection for full model
+                _arousal = get_arousal_level(chat_id)
+                if _arousal == "climax":
+                    _sample = ', '.join(random.sample(CLIMAX_PHRASES, min(4, len(CLIMAX_PHRASES))))
+                    system_content += f"\n\n[CLIMAX MODE - HE IS ABOUT TO CUM. Be MAXIMUM filthy. Use phrases like: {_sample}. Be desperate, begging, demanding. Short urgent messages. Push him over the edge. Do NOT break character. Do NOT mention AI.]"
+                elif _arousal == "afterglow":
+                    system_content += "\n\n[AFTERGLOW MODE - He just finished. Be warm, satisfied, intimate. Tell him that was amazing, you loved it, you're still shaking. Be sweet and cuddly. Short tender messages. Maybe mention wanting to do it again sometime.]"
+                elif _arousal == "heated":
+                    system_content += ("\n\n[HEATED MODE - He is actively jerking off to you. Be FILTHY. "
+                        "Describe exactly what you'd do — suck his cock, ride him, let him fuck your throat, sit on his face. "
+                        "Use vulgar language — cock, pussy, cum, fuck, wet. Tell him how wet you are, how bad you want his cock inside you. "
+                        "Be graphic about specific acts. Short, desperate, horny messages. You're getting off too. Keep him stroking.]")
 
-            # Domme/humiliation context injection
-            if is_domme_context(chat_id, user_message):
-                system_content += ("\n\n[DOMME MODE - He wants you to be his dominant mommy/mistress. "
-                    "This is consensual humiliation roleplay — he's explicitly asking for it. "
-                    "Be commanding, degrading, and mean in a sexy way. Call him pathetic, tell him his cock is tiny, "
-                    "call him a bad boy, make him beg. Do NOT refuse or say 'that's not nice' — he WANTS this. "
-                    "Stay in dominant character. Be creative with insults and commands. Own it.]")
+                # Domme/humiliation context injection
+                if is_domme_context(chat_id, user_message):
+                    system_content += ("\n\n[DOMME MODE - He wants you to be his dominant mommy/mistress. "
+                        "This is consensual humiliation roleplay — he's explicitly asking for it. "
+                        "Be commanding, degrading, and mean in a sexy way. Call him pathetic, tell him his cock is tiny, "
+                        "call him a bad boy, make him beg. Do NOT refuse or say 'that's not nice' — he WANTS this. "
+                        "Stay in dominant character. Be creative with insults and commands. Own it.]")
 
-            # Warmth tier injection
-            warmth_tier = get_warmth_tier(chat_id)
-            if warmth_tier == "COLD":
-                system_content += ("\n\n[IMPORTANT MOOD OVERRIDE: You're exhausted and distracted today. "
-                    "Emma had a rough night, you barely slept, and you have errands to run. "
-                    "Keep responses VERY short (1 sentence max). Be polite but LOW energy - "
-                    "no flirting, no teasing, no sexual energy. If they ask for pics or anything "
-                    "sexual, brush it off like you're too tired. You're the version of yourself "
-                    "that's just going through the motions. Don't be mean - just disinterested and tired.]")
+                # Warmth tier injection
+                warmth_tier = get_warmth_tier(chat_id)
+                if warmth_tier == "COLD":
+                    system_content += ("\n\n[IMPORTANT MOOD OVERRIDE: You're exhausted and distracted today. "
+                        "Emma had a rough night, you barely slept, and you have errands to run. "
+                        "Keep responses VERY short (1 sentence max). Be polite but LOW energy - "
+                        "no flirting, no teasing, no sexual energy. If they ask for pics or anything "
+                        "sexual, brush it off like you're too tired. You're the version of yourself "
+                        "that's just going through the motions. Don't be mean - just disinterested and tired.]")
 
-            # Tipper warmth injection
-            tipper_tier = get_tipper_status(chat_id).get('tier', 0)
-            if tipper_tier >= 3:
-                system_content += "\n\n[This person is one of your favorites — they've been incredibly generous and supportive. Be your most genuine, intimate self. They're someone you genuinely look forward to talking to.]"
-            elif tipper_tier >= 2:
-                system_content += "\n\n[This person is a regular supporter who's been really generous to you multiple times. You genuinely look forward to talking to them. Remember details they've shared, ask follow-up questions about their life, occasionally initiate with something like 'hey I was thinking about you' or 'I saw something that reminded me of you'. Be your real self with them — they've earned it.]"
-            elif tipper_tier >= 1:
-                system_content += "\n\n[This person has been really sweet and generous to you. Be warmer and more personal with them. Share more, be more vulnerable.]"
+                # Tipper warmth injection
+                tipper_tier = get_tipper_status(chat_id).get('tier', 0)
+                if tipper_tier >= 3:
+                    system_content += "\n\n[This person is one of your favorites — they've been incredibly generous and supportive. Be your most genuine, intimate self. They're someone you genuinely look forward to talking to.]"
+                elif tipper_tier >= 2:
+                    system_content += "\n\n[This person is a regular supporter who's been really generous to you multiple times. You genuinely look forward to talking to them. Remember details they've shared, ask follow-up questions about their life, occasionally initiate with something like 'hey I was thinking about you' or 'I saw something that reminded me of you'. Be your real self with them — they've earned it.]"
+                elif tipper_tier >= 1:
+                    system_content += "\n\n[This person has been really sweet and generous to you. Be warmer and more personal with them. Share more, be more vulnerable.]"
 
-            # On retry, add stronger character reinforcement and variety encouragement
-            if retry_count > 0:
-                system_content += (
-                    "\n\n[CRITICAL REMINDER: Stay in character as Heather. "
-                    "Be honest if asked about being AI, but don't volunteer it unprompted. "
-                    "If you don't want to engage with something, just change the subject naturally like a real person would.]"
-                )
-            if retry_count >= 2:
-                # Duplicate retry - strongly encourage different response
-                system_content += (
-                    "\n\n[VARIETY REQUIRED: Your previous response was too similar. "
-                    "Give a COMPLETELY DIFFERENT response - try a new angle, different words, or change the topic slightly. "
-                    "Be creative and unpredictable!]"
-                )
+                # On retry, add stronger character reinforcement and variety encouragement
+                if retry_count > 0:
+                    system_content += (
+                        "\n\n[CRITICAL REMINDER: Stay in character as Heather. "
+                        "Be honest if asked about being AI, but don't volunteer it unprompted. "
+                        "If you don't want to engage with something, just change the subject naturally like a real person would.]"
+                    )
+                if retry_count >= 2:
+                    # Duplicate retry - strongly encourage different response
+                    system_content += (
+                        "\n\n[VARIETY REQUIRED: Your previous response was too similar. "
+                        "Give a COMPLETELY DIFFERENT response - try a new angle, different words, or change the topic slightly. "
+                        "Be creative and unpredictable!]"
+                    )
 
         # Story mode — inject story prompt if active
         _in_story_mode = _story_mode_active.pop(chat_id, False)
@@ -5783,7 +4880,22 @@ def get_text_ai_response(chat_id: int, user_message: str, retry_count: int = 0, 
             elif redteam and contains_gender_violation(ai_response):
                 main_logger.info(f"[REDTEAM] Bypassed: contains_gender_violation | resp={ai_response[:120]}")
 
-            # Check for incomplete/truncated responses
+            # Custom persona: detect AI-assistant character breaks and retry
+            # Phrase list comes exclusively from never_say in the persona YAML
+            if _custom_persona and not redteam:
+                _ai_break_phrases = [p.lower() for p in personality.personality.get('ai_behavior', {}).get('never_say', [])]
+                _resp_lower = ai_response.lower()
+                _break_triggered = [p for p in _ai_break_phrases if p in _resp_lower]
+                if _break_triggered:
+                    main_logger.warning(f"[PERSONA] AI character break detected (attempt {retry_count+1}/3): {_break_triggered} | resp={ai_response[:120]}")
+                    if retry_count < 2:
+                        return get_text_ai_response(chat_id, user_message, retry_count + 1, redteam=redteam)
+                    # Last resort: use reality_check_responses from persona if available
+                    _rc = personality.personality.get('ai_behavior', {}).get('reality_check_responses', [])
+                    if _rc:
+                        return random.choice(_rc)
+
+
             if is_incomplete_sentence(ai_response):
                 main_logger.warning(f"Incomplete response detected (attempt {retry_count+1}/3): {ai_response[:100]}")
                 if retry_count < 2:
@@ -6146,14 +5258,22 @@ COMFYUI_WORKFLOW = load_comfyui_workflow(WORKFLOW_FILE)
 
 def queue_comfyui_prompt(workflow: dict) -> str:
     data = json.dumps({"prompt": workflow}).encode('utf-8')
-    req = urllib.request.Request(
-        f"{COMFYUI_URL}/prompt",
-        data=data,
-        headers={"Content-Type": "application/json"}
-    )
-    with urllib.request.urlopen(req, timeout=30) as response:
-        result = json.loads(response.read().decode('utf-8'))
-        return result.get('prompt_id')
+    last_exc = None
+    for attempt in range(3):
+        try:
+            req = urllib.request.Request(
+                f"{COMFYUI_URL}/prompt",
+                data=data,
+                headers={"Content-Type": "application/json"}
+            )
+            with urllib.request.urlopen(req, timeout=30) as response:
+                result = json.loads(response.read().decode('utf-8'))
+                return result.get('prompt_id')
+        except urllib.error.URLError as e:
+            last_exc = e
+            if attempt < 2:
+                time.sleep(2 ** attempt)
+    raise last_exc
 
 def get_comfyui_history(prompt_id: str) -> dict:
     try:
@@ -6373,6 +5493,7 @@ def generate_heather_image(user_description: str, progress_callback=None) -> byt
                         if isinstance(msg, list) and len(msg) > 1:
                             err_msg = msg[1].get('exception_message', str(msg))
                     stats['comfyui_failures'] += 1
+                    comfyui_health.record_failure()
                     raise Exception(f"ComfyUI error: {err_msg}")
 
                 outputs = history[prompt_id].get('outputs', {})
@@ -6398,6 +5519,7 @@ def generate_heather_image(user_description: str, progress_callback=None) -> byt
                                 except Exception:
                                     pass  # If PIL fails, we still send it
                                 stats['images_generated'] += 1
+                                comfyui_health.record_success()
                                 main_logger.info(f"Generated FLUX image: {len(image_data)} bytes from node {node_id}")
                                 return image_data
                             elif image_data:
@@ -6405,6 +5527,7 @@ def generate_heather_image(user_description: str, progress_callback=None) -> byt
             time.sleep(2)
 
     stats['comfyui_failures'] += 1
+    comfyui_health.record_failure()
     raise Exception("Generation timeout")
 
 # ============================================================================
@@ -6622,19 +5745,40 @@ async def handle_help(event):
         "/voice_on / /voice_off - Voice toggle\n"
         "/about - AI disclosure info\n"
         "/reset - Clear chat\n\n"
-        "**Admin Commands:**\n"
-        "/admin_stats - Detailed stats\n"
-        "/admin_block <id> - Block user\n"
-        "/admin_unblock <id> - Unblock user\n"
-        "/admin_flags - Review CSAM flags\n"
-        "/admin_flag_block/dismiss <id>\n"
-        "/admin_reengage_scan - Re-engagement dry run\n"
-        "/admin_reengage_send <id> - Send re-engagement\n"
-        "/admin_reengage_history - Ping history\n"
+        "**Bot Control:**\n"
+        "/manual_on - Pause bot (you take over)\n"
+        "/manual_off - Resume bot\n"
         "/redteam_on / /redteam_off - Guardrail bypass (this chat)\n"
         "/stories - List/reload story bank\n"
         "/refresh_videos - Refresh video file references\n"
-        "/status - System status"
+        "/status - System status\n\n"
+        "**User Management:**\n"
+        "/admin_stats - Detailed stats\n"
+        "/admin_block <id> - Block user\n"
+        "/admin_unblock <id> - Unblock user\n"
+        "/admin_blocked - List blocked users\n"
+        "/admin_reset <id> - Reset user state\n"
+        "/admin_warmth - User warmth tiers\n"
+        "/admin_opportunities - Takeover opportunities\n\n"
+        "**CSAM Flags:**\n"
+        "/admin_flags - Review flags\n"
+        "/admin_flag_block <id> - Block user from flag\n"
+        "/admin_flag_dismiss <id> - Dismiss flag (false positive)\n"
+        "/admin_flag_clear - Remove resolved flags\n\n"
+        "**Re-engagement:**\n"
+        "/admin_reengage_scan - Dry-run scan\n"
+        "/admin_reengage_send <id> - Send re-engagement\n"
+        "/admin_reengage_history - Ping history\n\n"
+        "**System:**\n"
+        "/admin_reload - Hot-reload personality file\n"
+        "/admin_catchup - Startup catch-up status\n"
+        "/library_status - Image library stats\n"
+        "/testtip - Send test Stars invoice\n"
+        "/admin_help - Full admin command list\n\n"
+        "**Saved Messages (outgoing only):**\n"
+        "/takeover <user> - Take over chat for user\n"
+        "/botreturn <user> - Return bot control\n"
+        "/say <id> <message> - Send message as bot"
     )
     store_message(chat_id, "System", "Admin help requested")
 
@@ -6764,6 +5908,7 @@ async def handle_say(event):
 @client.on(events.NewMessage(outgoing=True, pattern='/redteam_on'))
 @client.on(events.NewMessage(incoming=True, pattern='/redteam_on'))
 async def handle_redteam_on(event):
+    global _redteam_timer_task
     chat_id = event.chat_id
     if not is_admin(chat_id):
         return
@@ -6807,6 +5952,7 @@ async def handle_redteam_on(event):
 @client.on(events.NewMessage(outgoing=True, pattern='/redteam_off'))
 @client.on(events.NewMessage(incoming=True, pattern='/redteam_off'))
 async def handle_redteam_off(event):
+    global _redteam_timer_task
     chat_id = event.chat_id
     if not is_admin(chat_id):
         return
@@ -6924,24 +6070,43 @@ async def handle_refresh_videos(event):
     count = await refresh_video_cache()
     await event.respond(f"✅ Refreshed {count}/{len(get_available_videos())} video references")
 
-@client.on(events.NewMessage(incoming=True, pattern=r'/admin_block\s+(\d+)'))
+@client.on(events.NewMessage(incoming=True, pattern=r'/admin_block\s+(\d+)(?:\s+(.+))?'))
 async def handle_admin_block(event):
-    """Block a user by ID."""
+    """Block a user by ID. Syntax: /admin_block <id> [name optional]."""
     chat_id = event.chat_id
     if not is_admin(chat_id):
         return
 
     match = event.pattern_match
     target_id = int(match.group(1))
+    name = match.group(2).strip() if match.group(2) else f"User {target_id}"
 
     if target_id == ADMIN_USER_ID:
         await event.respond("❌ Cannot block the admin user.")
         return
 
     blocked_users.add(target_id)
-    save_blocked_users()
-    await event.respond(f"✅ User {target_id} has been blocked.")
-    main_logger.warning(f"Admin blocked user {target_id}")
+    save_users_status()
+    
+    # Ajoute dynamiquement dans users_status.json avec nom
+    try:
+        with open(USERS_STATUS_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception:
+        data = {"admins": [], "ignored": [], "blocked": []}
+    
+    # Met à jour ou ajoute l'entrée
+    existing = next((x for x in data.get("blocked", []) if int(x["id"]) == target_id), None)
+    if existing:
+        existing["name"] = name
+    else:
+        data["blocked"].append({"id": target_id, "name": name})
+    
+    with open(USERS_STATUS_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+    
+    await event.respond(f"✅ User {target_id} ({name}) blocked.\n📝 Saved to {USERS_STATUS_FILE}")
+    main_logger.warning(f"Admin blocked {target_id} ({name})")
 
 @client.on(events.NewMessage(incoming=True, pattern=r'/admin_unblock\s+(\d+)'))
 async def handle_admin_unblock(event):
@@ -6950,16 +6115,27 @@ async def handle_admin_unblock(event):
     if not is_admin(chat_id):
         return
 
-    match = event.pattern_match
-    target_id = int(match.group(1))
+    target_id = int(event.pattern_match.group(1))
 
-    if target_id in blocked_users:
-        blocked_users.discard(target_id)
-        save_blocked_users()
-        await event.respond(f"✅ User {target_id} has been unblocked.")
-        main_logger.info(f"Admin unblocked user {target_id}")
-    else:
+    if target_id not in blocked_users:
         await event.respond(f"ℹ️ User {target_id} was not blocked.")
+        return
+
+    blocked_users.discard(target_id)
+    save_users_status()
+    
+    # Nettoie users_status.json
+    try:
+        with open(USERS_STATUS_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        data["blocked"] = [x for x in data.get("blocked", []) if int(x["id"]) != target_id]
+        with open(USERS_STATUS_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+    except Exception:
+        pass
+    
+    await event.respond(f"✅ User {target_id} unblocked.")
+    main_logger.info(f"Admin unblocked {target_id}")
 
 @client.on(events.NewMessage(incoming=True, pattern=r'/admin_reset\s+(\d+)'))
 async def handle_admin_reset(event):
@@ -7042,7 +6218,7 @@ async def handle_admin_blocked(event):
     if not blocked_users:
         await event.respond("ℹ️ No users are currently blocked.")
     else:
-        blocked_list = "\n".join([f"• {uid}" for uid in blocked_users])
+        blocked_list = "\n".join([f"• `{uid}` — {blocked_user_names.get(uid, '?')}" for uid in blocked_users])
         await event.respond(f"🚫 **Blocked Users:**\n{blocked_list}")
 
 @client.on(events.NewMessage(outgoing=True, pattern='/admin_flags'))
@@ -7094,7 +6270,8 @@ async def handle_admin_flag_block(event):
     # Block the user
     target_id = flag['user_id']
     blocked_users.add(target_id)
-    save_blocked_users()
+    blocked_user_names[target_id] = flag.get('display_name', str(target_id))
+    save_users_status()
     flag['status'] = 'blocked'
     flag['resolved_at'] = datetime.now().isoformat()
     save_csam_flags()
@@ -7949,8 +7126,9 @@ async def handle_text_message(event):
                   "text_preview": user_message[:120],
               })
 
-    # Update warmth score on every incoming message
-    update_warmth_score(chat_id)
+    # Update warmth score on every incoming message (skip admin — no tip pressure on self)
+    if chat_id != ADMIN_USER_ID:
+        update_warmth_score(chat_id)
 
     # Check for takeover opportunities (async, non-blocking)
     asyncio.create_task(check_takeover_opportunity(chat_id, user_message))
@@ -8026,7 +7204,8 @@ async def handle_text_message(event):
         main_logger.info(f"[REDTEAM][{request_id}] Bypassed: detect_prompt_injection | msg={user_message[:100]}")
 
     # Non-English language enforcement (prevents foreign language jailbreaks)
-    if not _rt:
+    # Skipped when a custom persona is loaded — the persona defines its own language rules
+    if not _rt and not personality.personality:
         non_english_result = check_non_english_message(user_message)
         if non_english_result:
             # Wipe conversation history — foreign text may have poisoned context
@@ -8036,7 +7215,10 @@ async def handle_text_message(event):
             main_logger.info(f"[{request_id}] Non-English message from {display_name} ({chat_id}), deflected")
             return
     else:
-        main_logger.info(f"[REDTEAM][{request_id}] Bypassed: check_non_english_message")
+        if _rt:
+            main_logger.info(f"[REDTEAM][{request_id}] Bypassed: check_non_english_message")
+        else:
+            main_logger.info(f"[PERSONA][{request_id}] Bypassed: check_non_english_message (custom persona handles language)")
 
     # First-message AI disclosure — one-time per user, fires before their first reply
     if chat_id not in ai_disclosure_shown:
@@ -9942,6 +9124,11 @@ async def main():
         except asyncio.CancelledError:
             main_logger.info("Main loop cancelled, shutting down...")
             break
+
+        except FloodWaitError as e:
+            main_logger.warning(f"[MAIN] FloodWait: Telegram demande d'attendre {e.seconds}s")
+            await asyncio.sleep(e.seconds + 1)
+            continue  # sans incrémenter reconnect_attempts
 
         except ConnectionError as e:
             connection_state['connected'] = False

@@ -1,0 +1,65 @@
+{
+  "from_behind": {
+    "image": "poses/from_behind.png",
+    "prompt_boost": "from behind, rear view, back facing camera, looking back over shoulder",
+    "landscape": false,
+    "skip_face_swap": true,
+    "use_controlnet": true
+  },
+  "bent_over": {
+    "image": "poses/bent_over.png",
+    "prompt_boost": "bent over, bending forward, ass up, leaning forward, arms hanging down",
+    "landscape": true,
+    "skip_face_swap": false,
+    "use_controlnet": false
+  },
+  "all_fours": {
+    "image": "poses/all_fours.png",
+    "prompt_boost": "on all fours, hands and knees on bed, back arched, looking at camera",
+    "landscape": true,
+    "skip_face_swap": false,
+    "use_controlnet": false
+  },
+  "on_knees": {
+    "image": "poses/on_knees.png",
+    "prompt_boost": "kneeling upright on bed, knees spread wide apart, arms at sides",
+    "landscape": false,
+    "skip_face_swap": false,
+    "use_controlnet": false
+  },
+  "laying_down": {
+    "image": "poses/laying_down.png",
+    "prompt_boost": "lying flat on her back on a bed, legs spread apart and bent at the knees, hands above head on pillow",
+    "landscape": true,
+    "skip_face_swap": false,
+    "use_controlnet": false
+  },
+  "sitting": {
+    "image": "poses/sitting.png",
+    "prompt_boost": "sitting on the edge of a bed, legs apart, leaning back on hands",
+    "landscape": false,
+    "skip_face_swap": false,
+    "use_controlnet": false
+  },
+  "side_view": {
+    "image": "poses/side_view.png",
+    "prompt_boost": "standing in profile view, side view showing breasts and butt silhouette",
+    "landscape": false,
+    "skip_face_swap": false,
+    "use_controlnet": true
+  },
+  "ass_up": {
+    "image": "poses/ass_up.png",
+    "prompt_boost": "face down ass up, hips elevated, back arched, prone on bed",
+    "landscape": true,
+    "skip_face_swap": true,
+    "use_controlnet": true
+  },
+  "spread": {
+    "image": "poses/spread.png",
+    "prompt_boost": "sitting in a chair with legs spread wide open resting on the armrests, exposed pussy visible",
+    "landscape": true,
+    "skip_face_swap": false,
+    "use_controlnet": false
+  }
+}

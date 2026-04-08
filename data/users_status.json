@@ -1,0 +1,35 @@
+{
+  "blocked": [],
+  "ignored": [
+    {
+      "id": 178220800,
+      "name": "Telegram Service Notifications"
+    },
+    {
+      "id": 289460356,
+      "name": "Controller Bot"
+    },
+    {
+      "id": 777000,
+      "name": "Telegram Official"
+    },
+    {
+      "id": 93372553,
+      "name": "BotFather"
+    },
+    {
+      "id": 136817688,
+      "name": "Manybot"
+    },
+    {
+      "id": 790334875,
+      "name": "Livegram Bot"
+    }
+  ],
+  "admins": [
+    {
+      "id": 1234567890,
+      "name": "Admin"
+    }
+  ]
+}

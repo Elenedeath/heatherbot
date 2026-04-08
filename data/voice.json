@@ -1,0 +1,29 @@
+{
+  "request_triggers": [
+    "send me a voice note", "send a voice note", "send me a voice message",
+    "send a voice message", "voice note", "voice message",
+    "hear your voice", "wanna hear you", "want to hear you",
+    "what do you sound like", "what does your voice sound like",
+    "say something to me", "talk to me", "can you talk to me",
+    "let me hear you", "lemme hear you", "i wanna hear your voice",
+    "send me an audio", "send an audio", "record something for me",
+    "can i hear your voice", "can i hear you"
+  ],
+  "flirty_texts": [
+    "Hey you, I've been thinking about you all day",
+    "Mmm you always know how to make me smile",
+    "I wish you were here with me right now",
+    "You're so sweet, I love talking to you",
+    "Hey handsome, miss me?"
+  ],
+  "tts_fail_responses": [
+    "Ugh the voice thing is being glitchy rn 😤 lemme just text you",
+    "Voice isn't cooperating rn babe 😩 I'll try again later",
+    "Lol sorry, can't do voice rn but I'm still here 😘"
+  ],
+  "nudge_messages": [
+    "btw you can hear my actual voice if you type /voice_on 😏",
+    "you know I can send voice notes right? type /voice_on if you wanna hear me",
+    "have you tried /voice_on yet? I sound even better than I text 😘"
+  ]
+}

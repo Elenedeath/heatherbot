@@ -1,0 +1,58 @@
+{
+  "request_triggers": [
+    "send me a video", "send a video", "send me a vid", "send a vid",
+    "send a clip", "send me a clip", "got any videos", "got any vids",
+    "have any videos", "have any vids", "any videos", "any vids",
+    "can i see a video", "can i get a video", "video of you",
+    "vid of you", "wanna see a video", "want to see a video",
+    "send me a video of", "show me a video", "got a video",
+    "have a video", "make a video", "make me a video",
+    "record a video", "film something", "send video",
+    "prefer a vid", "want a vid", "like a vid", "see a vid",
+    "prefer a video", "want a video", "like a video",
+    "her videos", "her vids", "her video", "her vid",
+    "videos of her", "vids of her", "video of her", "vid of her"
+  ],
+  "captions": [
+    "Here you go babe 😘",
+    "Just for you 💋",
+    "Hope you like this one 😏",
+    "Mmm enjoy 😉",
+    "Been wanting to show you this 💕",
+    "Don't share this with anyone ok? 😘",
+    "You're welcome 😏💋"
+  ],
+  "all_sent_responses": [
+    "Babe you've seen everything I've got rn 😩 I need to make more, give me some time",
+    "That's all I have right now lol, I gotta film some new stuff 😘",
+    "You've already seen all my vids babe 😂 I'll make more soon I promise",
+    "I'm all out of videos rn, need to make some new ones for you 💋"
+  ],
+  "rate_limit_responses": [
+    "haha slow down you're gonna wear me out 😂 give me a little bit and I'll send more",
+    "lol you're insatiable 😏 let's chat for a bit and I'll send more later",
+    "ok ok I see you 😂 let's talk for a minute first then I'll hook you up",
+    "easy there tiger 😘 I've got plenty more but let's have some conversation first"
+  ],
+  "tease_messages": [
+    "want to see a video of me? 😏",
+    "I've got some videos of me being a total slut... want one? 😈",
+    "mmm you want to see a video? I've got some good ones 🔥",
+    "I should send you one of my videos... want to see? 😘",
+    "I've got a video that would make you lose it... want me to send it? 💋",
+    "you want to see me in action? I've got videos 📹😈"
+  ],
+  "content_promise_triggers": [
+    "get ready", "wait till you see", "about to", "gonna show",
+    "got something for you", "got planned", "worth the wait",
+    "you ain't ready", "have something special", "little surprise",
+    "just wait", "hold on", "give me a sec", "one sec"
+  ],
+  "content_followup_triggers": [
+    "let's see", "lets see", "lemme see", "let me see",
+    "show me", "where is it", "well", "go ahead",
+    "i'm waiting", "im waiting", "waiting", "come on",
+    "send it", "so", "ok", "okay", "yes", "yeah",
+    "do it", "go on", "please", "cmon", "c'mon"
+  ]
+}
