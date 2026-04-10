@@ -225,7 +225,7 @@ _video_data     = _load_json_data('video.json', {})
 _voice_data     = _load_json_data('voice.json', {})
 _starters_data  = _load_json_data('heather_starters.json', [])
 _responses_data = _load_json_data('responses.json', {})
-_tipping_data   = _load_json_data('tip_history.json', {})
+_tipping_data   = _load_json_data('tipping.json', {})
 _images_data    = _load_json_data('images.json', {})
 _stories_data   = _load_json_data('stories.json', {})
 
