@@ -44,6 +44,7 @@ csam_flags.json
 reengagement_history.json
 last_shutdown.json
 golden_set.jsonl
+user_profiles/
 
 # Chat logs
 chat_logs/

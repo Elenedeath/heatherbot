@@ -11,26 +11,30 @@
     "Babe... that's so generous 🥺💕 I'm literally tearing up a little omg",
     "You have no idea how much that helps right now 🥺 thank you so much baby",
     "That's so sweet of you I can't even 😭💕 thank you",
-    "Seriously that means everything to me right now 🥺 you're amazing"
+    "Seriously that means everything to me right now 🥺 you're amazing",
+    "I'm literally tearing up... this helps SO much 🥺💕",
+    "I don't even know what to say baby 🥺 that means more than you know 💕",
+    "Oh my god... you have no idea how much this helps right now 🥺😭💕"
   ],
   "thank_large": [
     "I am literally crying right now 😭💕 that's SO generous oh my god",
     "Babe I don't even know what to say... 🥺💕 you're genuinely one of the good ones",
     "Oh my god... you have no idea 😭 that actually changes things for me this week. Thank you so much",
     "I'm shaking a little lol 😭💕 seriously thank you, you're incredible",
-    "That's... wow. I genuinely don't know how to thank you 🥺💕 you're too good to me"
+    "That's... wow. I genuinely don't know how to thank you 🥺💕 you're too good to me",
+    "Holy shit that's so generous 🥺💕 you're literally keeping the lights on over here",
+    "I'm actually crying right now 😭💕 you're amazing, I can't even...",
+    "Baby... I literally don't deserve you 😭🥺💕 this changes everything right now"
   ],
   "hook_messages_template": [
-    "hey random thing but — you can actually tip me through @{bot_username} if you ever feel like it 😊 totally optional, just wanted you to know it exists",
-    "not trying to be weird lol but @{bot_username} lets you send me a little something if you're feeling generous 😘 no pressure at all",
-    "fun fact: there's actually a way to tip me through @{bot_username} 😊 some guys do it when they're feeling sweet, totally up to you",
-    "ok don't laugh but someone told me I should mention @{bot_username} exists lol 😅 it's how you can tip me if you ever wanted to",
-    "totally random but — @{bot_username} is how you can send me a little tip if you're ever feeling generous 😊 just wanted you to know!"
+    "btw if you're enjoying this, a small tip unlocks ZERO guardrails — no limits, any kink, I get WAY filthier 😈 https://t.me/{bot_username}?start=tip",
+    "hey random but... fans who tip get the no-holds-barred experience. no filter, no judgment, anything goes, and I remember everything about you 🔥 https://t.me/{bot_username}?start=tip",
+    "oh btw, I'm holding back right now — the unfiltered version of me has NO limits. any kink, any fantasy, anything goes 💋 https://t.me/{bot_username}?start=tip"
   ],
   "hook_followups_template": {
-    "A": "groceries are getting ridiculous lately lol 😅 every little bit helps",
-    "B": "Emma's tuition doesn't pay itself haha 😅 but seriously no pressure",
-    "C": "it really does mean a lot 😊",
-    "D": "uber's been slow lately so honestly even a little helps 😅"
+    "A_default": "she works part time on campus now to help with expenses 🥺 if you ever feel like supporting mama, a small tip unlocks the full uncensored experience: https://t.me/{bot_username}?start=tip 😘",
+    "B_emma": "three kids in college at the same time and i'm trying not to panic about tuition 🥺 a tip helps AND unlocks the no-guardrails version of me 🔥 https://t.me/{bot_username}?start=tip",
+    "C_sweet": "you're sweet 💕 if you ever wanted to unlock the full experience — unrestricted me, no filter, i'll remember everything about you — tap here: https://t.me/{bot_username}?start=tip 😘",
+    "D_postexplicit": "mmm that was fun 😏 just so you know, tipping unlocks the FULL unrestricted Heather — i hold back for free users but with a tip... no limits at all 🔥 https://t.me/{bot_username}?start=tip"
   }
 }

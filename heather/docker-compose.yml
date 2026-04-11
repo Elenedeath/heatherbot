@@ -40,7 +40,7 @@ services:
 
       # ── Models Configuration ────────────────────────────────────────────────
       # if true 12B SMALL else 70B FULL
-      SMALL_MODEL_MODE: "true"
+      SMALL_MODEL_MODE: "false"
 
       # ── Monitoring Configuration ────────────────────────────────────────────────
       MONITORING_ENABLED: "true"

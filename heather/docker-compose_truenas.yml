@@ -52,7 +52,7 @@ services:
       PAYMENT_BOT_TOKEN: CHANGE_ME
       PAYMENT_BOT_USERNAME: CHANGE_ME
       SESSION_NAME: /app/sessions/heather_session
-      SMALL_MODEL_MODE: 'true'
+      SMALL_MODEL_MODE: 'false'
       TELEGRAM_API_HASH: CHANGE_ME
       TELEGRAM_API_ID: 'CHANGE_ME'
       TEXT_HOST: llama-server

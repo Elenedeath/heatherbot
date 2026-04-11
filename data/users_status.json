@@ -2,20 +2,24 @@
   "blocked": [],
   "ignored": [
     {
-      "id": 178220800,
-      "name": "Telegram Service Notifications"
+      "id": 93372553,
+      "name": "BotFather"
     },
     {
-      "id": 289460356,
-      "name": "Controller Bot"
+      "id": 178220800,
+      "name": "Telegram Service Notifications"
     },
     {
       "id": 777000,
       "name": "Telegram Official"
     },
     {
-      "id": 93372553,
-      "name": "BotFather"
+      "id": 8659167177,
+      "name": "@HeatherMGMTBot — OpenClaw MGMT agent, Frank's admin channel"
+    },
+    {
+      "id": 289460356,
+      "name": "Controller Bot"
     },
     {
       "id": 136817688,
