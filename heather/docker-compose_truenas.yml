@@ -61,6 +61,13 @@ services:
       TTS_TIMEOUT: '120'
       UNFILTERED_MODE: 'true'
       WORKFLOW_FILE: /data/workflow_flux.json
+      LOG_DIR: "/app/logs"
+      DISCORD_TOKEN: "CHANGE_ME"
+      STORIES_CHANNEL_NAME: "stories"
+      TELEGRAM_USERNAME: "CHANGE_ME"
+      ENABLE_COHORT_WATCHDOG: "true"
+      BOT_DIR: "/data"
+      REPORT_DIR: "/data/reports"
     logging:
       driver: json-file
       options:

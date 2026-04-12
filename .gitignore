@@ -45,6 +45,7 @@ reengagement_history.json
 last_shutdown.json
 golden_set.jsonl
 user_profiles/
+reports/
 
 # Chat logs
 chat_logs/

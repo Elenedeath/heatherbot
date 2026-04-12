@@ -11020,7 +11020,17 @@ async def main():
             # Set Telegram bio to AI disclosure
             try:
                 from telethon.tl.functions.account import UpdateProfileRequest
-                bio_text = "Heather — AI companion (creator-built)"
+                # Dynamic Telegram bio: always shows real profession and city from persona
+                # Example: "Heather Dvorak — Mom in Kirkland (AI, creator-built)"
+                persona_name = getattr(personality, 'name', 'AI Companion')
+                persona_job = getattr(personality, 'occupation', None)
+                persona_city = getattr(personality, 'city', None)
+                if persona_job and persona_city:
+                    bio_text = f"{persona_name} — {persona_job} à {persona_city} (AI, creator-built)"
+                elif persona_job:
+                    bio_text = f"{persona_name} — {persona_job} (AI, creator-built)"
+                else:
+                    bio_text = f"{persona_name} — AI companion (creator-built)"
                 await client(UpdateProfileRequest(about=bio_text))
                 main_logger.info(f"Updated Telegram bio: {bio_text}")
             except Exception as e:
