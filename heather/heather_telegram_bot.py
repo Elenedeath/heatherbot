@@ -11021,16 +11021,30 @@ async def main():
             try:
                 from telethon.tl.functions.account import UpdateProfileRequest
                 # Dynamic Telegram bio: always shows real profession and city from persona
-                # Example: "Heather Dvorak — Mom in Kirkland (AI, creator-built)"
-                persona_name = getattr(personality, 'name', 'AI Companion')
-                persona_job = getattr(personality, 'occupation', None)
-                persona_city = getattr(personality, 'city', None)
+                # truncated if exceeds Telegram's 70 character limit
+                # Example: "Heather Dvorak — Mom in Kirkland (AI)"
+                persona_name = personality.name or 'AI Companion'
+                persona_job = personality.occupation or None
+                persona_city = personality.location or None
+                max_bio_length = 70
+                # Try full bio, then degrade if too long
+                bio_variants = []
                 if persona_job and persona_city:
-                    bio_text = f"{persona_name} — {persona_job} à {persona_city} (AI, creator-built)"
-                elif persona_job:
-                    bio_text = f"{persona_name} — {persona_job} (AI, creator-built)"
+                    bio_variants.append(f"{persona_name} — {persona_job} à {persona_city} (AI)")
+                if persona_job:
+                    bio_variants.append(f"{persona_name} — {persona_job} (AI)")
+                # Always add fallback
+                bio_variants.append(f"{persona_name} — AI companion (creator-built)")
+
+                # Pick the first variant that fits
+                for variant in bio_variants:
+                    if len(variant) <= max_bio_length:
+                        bio_text = variant
+                        break
                 else:
-                    bio_text = f"{persona_name} — AI companion (creator-built)"
+                    # If none fit, truncate the first variant
+                    bio_text = bio_variants[0][:max_bio_length - 1] + '…'
+
                 await client(UpdateProfileRequest(about=bio_text))
                 main_logger.info(f"Updated Telegram bio: {bio_text}")
             except Exception as e:
