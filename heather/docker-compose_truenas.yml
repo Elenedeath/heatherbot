@@ -34,7 +34,6 @@ services:
       - llama-server
       - chatterbox-tts
     environment:
-      ADMIN_USER_ID: 'CHANGE_ME'
       AI_TIMEOUT: '120'
       ALERT_COOLDOWN_SECONDS: '300'
       COMFYUI_FACE_IMAGE: /data/comfyui-input/heather_face.png

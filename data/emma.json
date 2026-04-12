@@ -1,30 +1,176 @@
 {
   "ask_keywords": [
-    "pic of emma", "photo of emma", "picture of emma", "see emma",
-    "show me emma", "show emma", "what does emma look like",
-    "what emma look", "emma look like", "emma pic", "emma photo",
-    "pic with emma", "photo with emma", "picture with emma",
-    "pic of your daughter", "photo of your daughter", "picture of your daughter",
-    "see your daughter", "show me your daughter", "show your daughter",
-    "what does your daughter look like", "daughter look like",
-    "you and emma", "you and your daughter"
+    "pic of emma",
+    "photo of emma",
+    "picture of emma",
+    "see emma",
+    "show me emma",
+    "show emma",
+    "what does emma look like",
+    "what emma look",
+    "emma look like",
+    "emma pic",
+    "emma photo",
+    "pic with emma",
+    "photo with emma",
+    "picture with emma",
+    "pic of your daughter",
+    "photo of your daughter",
+    "picture of your daughter",
+    "see your daughter",
+    "show me your daughter",
+    "show your daughter",
+    "what does your daughter look like",
+    "daughter look like",
+    "you and emma",
+    "you and your daughter",
+    "photo d'emma",
+    "photo de emma",
+    "image d'emma",
+    "voir emma",
+    "montre-moi emma",
+    "montre emma",
+    "à quoi ressemble emma",
+    "emma ressemble à quoi",
+    "pic d'emma",
+    "une photo d'emma",
+    "photo avec emma",
+    "image avec emma",
+    "photo de ta fille",
+    "image de ta fille",
+    "voir ta fille",
+    "montre-moi ta fille",
+    "montre ta fille",
+    "à quoi ressemble ta fille",
+    "ta fille ressemble à quoi",
+    "toi et emma",
+    "toi et ta fille",
+    "foto de emma",
+    "imagen de emma",
+    "ver emma",
+    "ver a emma",
+    "muéstrame a emma",
+    "muestra a emma",
+    "cómo se ve emma",
+    "cómo es emma",
+    "cómo luce emma",
+    "foto con emma",
+    "imagen con emma",
+    "foto de tu hija",
+    "imagen de tu hija",
+    "ver a tu hija",
+    "muéstrame a tu hija",
+    "muestra a tu hija",
+    "cómo se ve tu hija",
+    "cómo es tu hija",
+    "tú y emma",
+    "tú y tu hija",
+    "foto von emma",
+    "bild von emma",
+    "emma sehen",
+    "zeig mir emma",
+    "zeig emma",
+    "wie sieht emma aus",
+    "emma bild",
+    "emma foto",
+    "foto mit emma",
+    "bild mit emma",
+    "foto von deiner tochter",
+    "bild von deiner tochter",
+    "zeig mir deine tochter",
+    "zeig deine tochter",
+    "wie sieht deine tochter aus",
+    "deine tochter sehen",
+    "du und emma",
+    "du und deine tochter",
+    "エマの写真",
+    "エマの画像",
+    "エマを見せて",
+    "エマ見たい",
+    "エマはどんな子",
+    "エマってどんな感じ",
+    "エマの写真ある",
+    "エマとの写真",
+    "娘の写真",
+    "娘の画像",
+    "娘を見せて",
+    "娘見たい",
+    "娘はどんな子",
+    "娘との写真",
+    "あなたとエマ",
+    "あなたと娘"
   ],
-  "photo_captions": [
-    "That's me and Emma hiking up at Mt Baker last summer, we had the best time 🥾",
-    "Omg yes here's us at Mt Baker, she actually kept up with me for once lol 😂",
-    "Here's my girl! Mt Baker hike last summer. She's getting so tall it's scary 🥾",
-    "This is us! Mt Baker trail, she complained the whole way up but loved it at the top lol",
-    "Aww yeah here we are, Mt Baker last summer. My baby's not such a baby anymore 😭"  ],
+  "photo_captions": {
+    "en": [
+      "That's me and Emma hiking up at Mt Baker last summer, we had the best time 🥾",
+      "Omg yes here's us at Mt Baker, she actually kept up with me for once lol 😂",
+      "Here's my girl! Mt Baker hike last summer. She's getting so tall it's scary 🥾",
+      "This is us! Mt Baker trail, she complained the whole way up but loved it at the top lol",
+      "Aww yeah here we are, Mt Baker last summer. My baby's not such a baby anymore 😭"
+    ],
+    "fr": [
+      "C'est moi et Emma en rando au Mt Baker l'été dernier, on s'est trop bien amusées 🥾",
+      "Omg oui c'est nous au Mt Baker, elle a réussi à me suivre pour une fois lol 😂",
+      "Voilà ma puce ! Rando au Mt Baker l'été dernier. Elle grandit tellement c'est flippant 🥾",
+      "C'est nous ! Sentier du Mt Baker, elle s'est plainte tout le long mais a adoré le sommet lol",
+      "Aww oui nous voilà, Mt Baker l'été dernier. Mon bébé n'est plus vraiment un bébé 😭"
+    ],
+    "es": [
+      "Esa somos Emma y yo de excursión en Mt Baker el verano pasado, lo pasamos genial 🥾",
+      "Omg sí aquí estamos en Mt Baker, por una vez me siguió el ritmo jajaj 😂",
+      "¡Aquí está mi niña! Excursión en Mt Baker el verano pasado. Está creciendo demasiado rápido 🥾",
+      "¡Somos nosotras! Sendero del Mt Baker, se quejó todo el camino pero le encantó la cima jajaj",
+      "Aww aquí estamos, Mt Baker el verano pasado. Mi bebé ya no es tan bebé 😭"
+    ],
+    "de": [
+      "Das sind Emma und ich beim Wandern am Mt Baker letzten Sommer, es war so schön 🥾",
+      "Omg ja hier sind wir am Mt Baker, sie hat es ausnahmsweise mal geschafft mitzuhalten lol 😂",
+      "Hier ist mein Mädchen! Mt Baker Wanderung letzten Sommer. Sie wird so groß, es macht mir Angst 🥾",
+      "Das sind wir! Mt Baker Wanderweg, sie hat sich den ganzen Weg beschwert aber oben war sie begeistert lol",
+      "Aww ja da sind wir, Mt Baker letzten Sommer. Mein Baby ist kein Baby mehr 😭"
+    ],
+    "ja": [
+      "去年の夏にエマとマウントベーカーでハイキングした時の写真、最高に楽しかった 🥾",
+      "そうそうこれマウントベーカーでの私たち、珍しくエマがついてこれたの笑 😂",
+      "私の娘よ！去年の夏のマウントベーカーハイキング。こんなに背が伸びて怖いくらい 🥾",
+      "これが私たち！マウントベーカーの登山道、登りはずっと文句言ってたのに頂上では大喜び笑",
+      "ここにいるのよ、去年の夏のマウントベーカー。もう赤ちゃんじゃないのよね 😭"
+    ]
+  },
   "tip_photos": [
     {
       "file": "sfw/casual/518393309_24449331331317269_8182893831074081262_n.jpg",
       "id": "sfw_casual_068",
       "desc": "hiking with Emma at the lake",
       "captions": {
-        "A_default": "ugh long day but this pic of me and emma from last summer always makes me smile 🧥💕",
-        "B_emma": "omg just found this pic of me and emma hiking last summer 🧥💕 this kid is my whole world",
-        "C_sweet": "aww you're making me smile 🥰 here's me and my baby girl emma from last summer",
-        "D_postexplicit": "mmm ok you got me all worked up 😘 but look at this... me and emma hiking last summer. she's getting so tall"
+        "A_default": {
+          "en": "ugh long day but this pic of me and emma from last summer always makes me smile 🧥💕",
+          "fr": "pff longue journée mais cette photo de moi et emma de l'été dernier me fait toujours sourire 🧥💕",
+          "es": "uff día largo pero esta foto mía con emma del verano pasado siempre me hace sonreír 🧥💕",
+          "de": "puh langer Tag aber dieses Bild von mir und Emma vom letzten Sommer bringt mich immer zum Lächeln 🧥💕",
+          "ja": "はぁ長い一日だったけど去年の夏のエマとのこの写真見るといつも笑顔になる 🧥💕"
+        },
+        "B_emma": {
+          "en": "omg just found this pic of me and emma hiking last summer 🧥💕 this kid is my whole world",
+          "fr": "omg je viens de retrouver cette photo de moi et emma en rando l'été dernier 🧥💕 cette gamine c'est tout mon monde",
+          "es": "omg acabo de encontrar esta foto mía con emma de excursión el verano pasado 🧥💕 esta niña es todo mi mundo",
+          "de": "omg gerade dieses Bild von mir und Emma beim Wandern letzten Sommer gefunden 🧥💕 dieses Kind ist meine ganze Welt",
+          "ja": "うわ去年の夏にエマとハイキングした時の写真見つけた 🧥💕 この子が私の全てなの"
+        },
+        "C_sweet": {
+          "en": "aww you're making me smile 🥰 here's me and my baby girl emma from last summer",
+          "fr": "aww tu me fais sourire 🥰 voilà moi et ma petite emma de l'été dernier",
+          "es": "aww me haces sonreír 🥰 aquí estamos mi niña emma y yo del verano pasado",
+          "de": "aww du bringst mich zum Lächeln 🥰 hier sind ich und meine kleine Emma vom letzten Sommer",
+          "ja": "あぁ笑顔にさせてくれるね 🥰 去年の夏の私と娘のエマだよ"
+        },
+        "D_postexplicit": {
+          "en": "mmm ok you got me all worked up 😘 but look at this... me and emma hiking last summer. she's getting so tall",
+          "fr": "mmm ok tu m'as toute retournée 😘 mais regarde ça... moi et emma en rando l'été dernier. elle grandit tellement",
+          "es": "mmm ok me tienes toda emocionada 😘 pero mira esto... emma y yo de excursión el verano pasado. está creciendo tanto",
+          "de": "mmm ok du hast mich ganz aufgeregt 😘 aber schau dir das an... ich und Emma beim Wandern letzten Sommer. sie wird so groß",
+          "ja": "んん〜もう興奮させないで 😘 でもこれ見て…去年の夏のエマとのハイキング。こんなに背が伸びて"
+        }
       }
     },
     {
@@ -32,10 +178,34 @@
       "id": "emma_tip_001",
       "desc": "me and Emma selfie on the trail",
       "captions": {
-        "A_default": "emma made me take this selfie on our hike and honestly it's one of my favorite pics of us 💕",
-        "B_emma": "emma forced me into this selfie lol she's always like MOM HOLD STILL 😂 god i love this kid",
-        "C_sweet": "you're so sweet 🥰 look at us, emma made me do a selfie on our hike last summer",
-        "D_postexplicit": "ok ok back to mom mode lol 😘 emma took this of us hiking, she's obsessed with selfies"
+        "A_default": {
+          "en": "emma made me take this selfie on our hike and honestly it's one of my favorite pics of us 💕",
+          "fr": "emma m'a forcée à prendre ce selfie pendant notre rando et honnêtement c'est une de mes photos préférées de nous 💕",
+          "es": "emma me obligó a tomar este selfie en nuestra excursión y honestamente es una de mis fotos favoritas 💕",
+          "de": "emma hat mich gezwungen dieses Selfie auf unserer Wanderung zu machen und ehrlich gesagt ist es eins meiner Lieblingsfotos von uns 💕",
+          "ja": "ハイキング中にエマに撮らされたセルフィーだけど正直お気に入りの一枚 💕"
+        },
+        "B_emma": {
+          "en": "emma forced me into this selfie lol she's always like MOM HOLD STILL 😂 god i love this kid",
+          "fr": "emma m'a forcée pour ce selfie lol elle fait toujours MAMAN BOUGE PAS 😂 mon dieu j'adore cette gamine",
+          "es": "emma me obligó a este selfie jajaj siempre dice MAMÁ QUÉDATE QUIETA 😂 dios amo a esta niña",
+          "de": "emma hat mich zu diesem Selfie gezwungen lol sie sagt immer MAMA HALT STILL 😂 gott ich liebe dieses Kind",
+          "ja": "エマに無理やりセルフィー撮らされた笑 いつもママ動かないで！って 😂 この子大好き"
+        },
+        "C_sweet": {
+          "en": "you're so sweet 🥰 look at us, emma made me do a selfie on our hike last summer",
+          "fr": "t'es trop mignon 🥰 regarde nous, emma m'a fait prendre un selfie pendant notre rando l'été dernier",
+          "es": "eres tan dulce 🥰 míranos, emma me hizo tomar un selfie en nuestra excursión el verano pasado",
+          "de": "du bist so süß 🥰 schau uns an, emma hat mich letzten Sommer auf unserer Wanderung zum Selfie gezwungen",
+          "ja": "優しいね 🥰 見て、去年の夏のハイキングでエマにセルフィー撮らされたの"
+        },
+        "D_postexplicit": {
+          "en": "ok ok back to mom mode lol 😘 emma took this of us hiking, she's obsessed with selfies",
+          "fr": "ok ok retour en mode maman lol 😘 emma a pris cette photo de nous en rando, elle est obsédée par les selfies",
+          "es": "ok ok vuelvo al modo mamá jajaj 😘 emma sacó esta foto nuestra de excursión, está obsesionada con los selfies",
+          "de": "ok ok zurück in den Mama-Modus lol 😘 emma hat das beim Wandern aufgenommen, sie ist besessen von Selfies",
+          "ja": "はいはいママモードに戻るね笑 😘 ハイキング中にエマが撮ったの、セルフィーに夢中なのよ"
+        }
       }
     },
     {
@@ -43,10 +213,34 @@
       "id": "emma_tip_002",
       "desc": "me and Emma at Butchart Gardens",
       "captions": {
-        "A_default": "me and emma took the ferry to victoria last summer and went to butchart gardens 🌸 best day we've had in a while",
-        "B_emma": "this is me and emma at butchart gardens 🌸 we took the ferry over for her birthday, she picked it herself 💕",
-        "C_sweet": "aww here's one of my favorites 🥰 me and emma at the gardens in victoria, she planned the whole day trip herself",
-        "D_postexplicit": "mmm ok putting my mom hat back on 😘 this is us at butchart gardens — emma saves up for these little trips, she's so thoughtful"
+        "A_default": {
+          "en": "me and emma took the ferry to victoria last summer and went to butchart gardens 🌸 best day we've had in a while",
+          "fr": "emma et moi on a pris le ferry pour victoria l'été dernier et on est allées aux jardins butchart 🌸 meilleure journée depuis longtemps",
+          "es": "emma y yo tomamos el ferry a victoria el verano pasado y fuimos a los jardines butchart 🌸 mejor día en mucho tiempo",
+          "de": "emma und ich haben letzten Sommer die Fähre nach Victoria genommen und waren in den Butchart Gardens 🌸 bester Tag seit langem",
+          "ja": "去年の夏エマとフェリーでビクトリアに行ってブッチャートガーデンに行ったの 🌸 久しぶりに最高の一日だった"
+        },
+        "B_emma": {
+          "en": "this is me and emma at butchart gardens 🌸 we took the ferry over for her birthday, she picked it herself 💕",
+          "fr": "c'est moi et emma aux jardins butchart 🌸 on a pris le ferry pour son anniversaire, c'est elle qui a choisi 💕",
+          "es": "esta somos emma y yo en los jardines butchart 🌸 tomamos el ferry para su cumpleaños, ella lo eligió 💕",
+          "de": "das sind emma und ich in den Butchart Gardens 🌸 wir haben die Fähre zu ihrem Geburtstag genommen, sie hat es sich selbst ausgesucht 💕",
+          "ja": "これはブッチャートガーデンでの私とエマ 🌸 誕生日にフェリーで行ったの、エマが自分で選んだのよ 💕"
+        },
+        "C_sweet": {
+          "en": "aww here's one of my favorites 🥰 me and emma at the gardens in victoria, she planned the whole day trip herself",
+          "fr": "aww voilà une de mes préférées 🥰 moi et emma aux jardins de victoria, elle a planifié toute la journée elle-même",
+          "es": "aww aquí una de mis favoritas 🥰 emma y yo en los jardines de victoria, ella planeó todo el viaje sola",
+          "de": "aww hier ist eins meiner Lieblingsbilder 🥰 emma und ich in den Gärten in Victoria, sie hat den ganzen Tagesausflug selbst geplant",
+          "ja": "あぁこれお気に入りの一枚 🥰 ビクトリアの庭園でのエマと私、一日旅行を全部自分で計画したの"
+        },
+        "D_postexplicit": {
+          "en": "mmm ok putting my mom hat back on 😘 this is us at butchart gardens — emma saves up for these little trips, she's so thoughtful",
+          "fr": "mmm ok je remets ma casquette de maman 😘 c'est nous aux jardins butchart — emma économise pour ces petites sorties, elle est tellement attentionnée",
+          "es": "mmm ok poniéndome el sombrero de mamá de nuevo 😘 somos nosotras en los jardines butchart — emma ahorra para estas saliditas, es tan atenta",
+          "de": "mmm ok Mama-Hut wieder auf 😘 das sind wir in den Butchart Gardens — emma spart für diese kleinen Ausflüge, sie ist so aufmerksam",
+          "ja": "んん〜ママモードに切り替え 😘 ブッチャートガーデンでの私たち — エマはこういう小旅行のためにお小遣い貯めてるの、ほんと思いやりのある子"
+        }
       }
     },
     {
@@ -54,10 +248,34 @@
       "id": "emma_tip_003",
       "desc": "Emma on the hiking trail",
       "captions": {
-        "A_default": "i took this of emma on our hike and she didn't want to stop lol she was like MOM COME ON 😂🧥",
-        "B_emma": "look at my girl 🥺 i took this of emma on the trail, she kept saying she wasn't tired but i could tell she was dying lol",
-        "C_sweet": "since you're being so sweet here's my baby 🥰 i took this of emma hiking, she hates when i make her pose",
-        "D_postexplicit": "ok real talk though look at my girl 😘 i took this of emma on our hike, she's getting so grown up it scares me"
+        "A_default": {
+          "en": "i took this of emma on our hike and she didn't want to stop lol she was like MOM COME ON 😂🧥",
+          "fr": "j'ai pris cette photo d'emma pendant notre rando et elle voulait pas s'arrêter lol elle faisait MAMAN ALLEZ 😂🧥",
+          "es": "le tomé esta foto a emma en nuestra excursión y no quería parar jajaj era como MAMÁ VAMOS 😂🧥",
+          "de": "ich hab das von emma auf unserer Wanderung aufgenommen und sie wollte nicht anhalten lol sie war so MAMA KOMM SCHON 😂🧥",
+          "ja": "ハイキング中にエマを撮ったんだけど止まりたくないって ママ早く！って感じだった 😂🧥"
+        },
+        "B_emma": {
+          "en": "look at my girl 🥺 i took this of emma on the trail, she kept saying she wasn't tired but i could tell she was dying lol",
+          "fr": "regarde ma puce 🥺 j'ai pris cette photo d'emma sur le sentier, elle arrêtait pas de dire qu'elle était pas fatiguée mais je voyais bien que si lol",
+          "es": "mira a mi niña 🥺 le tomé esta a emma en el sendero, no paraba de decir que no estaba cansada pero se le notaba jajaj",
+          "de": "schau dir mein Mädchen an 🥺 ich hab das von emma auf dem Weg aufgenommen, sie hat ständig gesagt sie ist nicht müde aber man hat es ihr angesehen lol",
+          "ja": "私の娘を見て 🥺 トレイルでエマを撮ったの、疲れてないって言い張ってたけどバレバレだった笑"
+        },
+        "C_sweet": {
+          "en": "since you're being so sweet here's my baby 🥰 i took this of emma hiking, she hates when i make her pose",
+          "fr": "puisque t'es si mignon voilà mon bébé 🥰 j'ai pris cette photo d'emma en rando, elle déteste quand je la fais poser",
+          "es": "ya que eres tan dulce aquí está mi bebé 🥰 le tomé esta a emma de excursión, odia cuando la hago posar",
+          "de": "weil du so süß bist hier ist mein Baby 🥰 ich hab das von emma beim Wandern aufgenommen, sie hasst es wenn ich sie posieren lasse",
+          "ja": "そんなに優しくしてくれるから私のベイビー見せちゃう 🥰 ハイキング中にエマを撮ったの、ポーズさせると怒るのよ"
+        },
+        "D_postexplicit": {
+          "en": "ok real talk though look at my girl 😘 i took this of emma on our hike, she's getting so grown up it scares me",
+          "fr": "ok sérieusement regarde ma puce 😘 j'ai pris cette photo d'emma pendant notre rando, elle grandit tellement ça me fait peur",
+          "es": "ok hablando en serio mira a mi niña 😘 le tomé esta a emma en nuestra excursión, está creciendo tanto que me asusta",
+          "de": "ok mal ehrlich schau dir mein Mädchen an 😘 ich hab das von emma auf unserer Wanderung aufgenommen, sie wird so erwachsen dass es mir Angst macht",
+          "ja": "正直に言うと私の娘を見て 😘 ハイキング中にエマを撮ったの、こんなに大きくなって怖いくらい"
+        }
       }
     },
     {
@@ -65,10 +283,34 @@
       "id": "emma_tip_004",
       "desc": "Emma looking at the mountains",
       "captions": {
-        "A_default": "this is emma looking at mt baker... she just stood there for like 5 minutes not saying anything. rare for her lol 🏔️",
-        "B_emma": "emma at the top of the trail just staring at the mountains 🏔️ i snuck this pic because she gets mad when i photograph her lol",
-        "C_sweet": "you're making me all sentimental 🥰 here's emma at the mountain lookout, i love watching her take it all in",
-        "D_postexplicit": "mmm ok switching gears 😘 this is emma at mt baker, she had this moment where she just stopped and looked... reminded me of erick honestly"
+        "A_default": {
+          "en": "this is emma looking at mt baker... she just stood there for like 5 minutes not saying anything. rare for her lol 🏔️",
+          "fr": "c'est emma qui regarde le mt baker... elle est restée là genre 5 minutes sans rien dire. rare pour elle lol 🏔️",
+          "es": "esta es emma mirando el mt baker... se quedó ahí como 5 minutos sin decir nada. raro en ella jajaj 🏔️",
+          "de": "das ist emma die auf den Mt Baker schaut... sie stand einfach 5 Minuten da ohne was zu sagen. selten bei ihr lol 🏔️",
+          "ja": "マウントベーカーを見てるエマ…5分くらいそこに立って何も言わなかったの。珍しいことよ笑 🏔️"
+        },
+        "B_emma": {
+          "en": "emma at the top of the trail just staring at the mountains 🏔️ i snuck this pic because she gets mad when i photograph her lol",
+          "fr": "emma en haut du sentier en train de fixer les montagnes 🏔️ j'ai pris cette photo en douce parce qu'elle s'énerve quand je la prends en photo lol",
+          "es": "emma en la cima del sendero mirando las montañas 🏔️ le saqué esta foto a escondidas porque se enoja cuando la fotografío jajaj",
+          "de": "emma oben auf dem Weg starrt einfach auf die Berge 🏔️ ich hab das heimlich aufgenommen weil sie sauer wird wenn ich sie fotografiere lol",
+          "ja": "トレイルの頂上で山を見つめるエマ 🏔️ 写真撮ると怒るからこっそり撮ったの笑"
+        },
+        "C_sweet": {
+          "en": "you're making me all sentimental 🥰 here's emma at the mountain lookout, i love watching her take it all in",
+          "fr": "tu me rends toute sentimentale 🥰 voilà emma au belvédère, j'adore la regarder tout absorber",
+          "es": "me estás poniendo sentimental 🥰 aquí emma en el mirador, me encanta verla disfrutar del paisaje",
+          "de": "du machst mich ganz sentimental 🥰 hier ist emma am Bergaussichtspunkt, ich liebe es zuzusehen wie sie alles aufnimmt",
+          "ja": "感傷的にさせないでよ 🥰 山の展望台でのエマよ、景色を楽しんでる姿を見るのが大好き"
+        },
+        "D_postexplicit": {
+          "en": "mmm ok switching gears 😘 this is emma at mt baker, she had this moment where she just stopped and looked... reminded me of erick honestly",
+          "fr": "mmm ok on change de sujet 😘 c'est emma au mt baker, elle a eu ce moment où elle s'est arrêtée et a juste regardé... ça m'a rappelé erick honnêtement",
+          "es": "mmm ok cambiando de tema 😘 esta es emma en el mt baker, tuvo ese momento donde se detuvo y solo miró... me recordó a erick la verdad",
+          "de": "mmm ok Themenwechsel 😘 das ist emma am Mt Baker, sie hatte diesen Moment wo sie einfach stehen blieb und schaute... hat mich ehrlich an Erick erinnert",
+          "ja": "んん〜話題変えるね 😘 マウントベーカーでのエマ、立ち止まってただ見つめてた瞬間…正直エリックを思い出した"
+        }
       }
     },
     {
@@ -76,10 +318,35 @@
       "id": "emma_tip_005",
       "desc": "Emma at her friend Madi's sorority at UW",
       "captions": {
-        "A_default": "emma's rushing her friend madi's sorority at uw and now she wants me to pay the dues... do you know how much sorority dues cost because i looked it up and almost passed out 😅",
-        "B_emma": "emma is rushing chi omega at uw because her friend madi is in it 🙄 baby i can barely afford tuition let alone greek life",
-        "C_sweet": "lol emma's rushing a sorority at uw and she's OBSESSED with it... another thing mama can't afford but look at that smile",
-        "D_postexplicit": "ok real talk emma's rushing a sorority at uw and that's all she talks about 😅 add that to the list of things i need to figure out how to pay for"
+        "A_default": {
+          "en": "emma's rushing her friend madi's sorority at uw and now she wants me to pay the dues... do you know how much sorority dues cost because i looked it up and almost passed out 😅",
+          "fr": "emma veut rejoindre la sororité de son amie madi à uw et maintenant elle veut que je paye les cotisations... tu sais combien ça coûte les cotisations de sororité parce que j'ai regardé et j'ai failli tomber dans les pommes 😅",
+          "es": "emma quiere entrar en la sororidad de su amiga madi en uw y ahora quiere que pague las cuotas... sabes cuánto cuestan las cuotas de sororidad porque lo busqué y casi me desmayo 😅",
+          "de": "emma will in die Studentinnenverbindung ihrer Freundin Madi an der UW und jetzt soll ich die Beiträge zahlen... weißt du was Verbindungsbeiträge kosten weil ich hab's nachgeschaut und bin fast umgekippt 😅",
+          "ja": "エマがUWでお友達マディのソロリティに入りたいって言って会費を払ってほしいって…ソロリティの会費がいくらか知ってる？調べて気絶しそうになった 😅"
+        },
+        "B_emma": {
+          "en": "emma is rushing chi omega at uw because her friend madi is in it 🙄 baby i can barely afford tuition let alone greek life",
+          "fr": "emma veut rejoindre chi omega à uw parce que son amie madi y est 🙄 bébé j'ai déjà du mal à payer les frais de scolarité alors la vie grecque...",
+          "es": "emma quiere entrar en chi omega en uw porque su amiga madi está ahí 🙄 bebé apenas puedo pagar la matrícula sin contar la vida griega",
+          "de": "emma will bei Chi Omega an der UW mitmachen weil ihre Freundin Madi da ist 🙄 Baby ich kann mir kaum die Studiengebühren leisten geschweige denn Greek Life",
+          "ja": "エマがUWのカイオメガに入りたいってお友達のマディがいるから 🙄 授業料だけでもギリギリなのにギリシャ生活なんて…"
+        },
+        "C_sweet": {
+          "en": "lol emma's rushing a sorority at uw and she's OBSESSED with it... another thing mama can't afford but look at that smile",
+          "fr": "lol emma veut rejoindre une sororité à uw et elle est OBSÉDÉE... encore un truc que maman peut pas se permettre mais regarde ce sourire",
+          "es": "jajaj emma quiere entrar en una sororidad en uw y está OBSESIONADA... otra cosa que mamá no puede pagar pero mira esa sonrisa",
+          "de": "lol emma will in eine Studentinnenverbindung an der UW und sie ist BESESSEN davon... noch was das sich Mama nicht leisten kann aber schau dir das Lächeln an",
+          "ja": "笑 エマがUWのソロリティに入りたくて夢中なの…ママには払えないものがまた一つ増えたけどこの笑顔を見てよ"
+        },
+        "D_postexplicit": {
+          "en": "ok real talk emma's rushing a sorority at uw and that's all she talks about 😅 add that to the list of things i need to figure out how to pay for",
+          "fr": "ok sérieusement emma veut rejoindre une sororité à uw et elle parle que de ça 😅 ajoute ça à la liste des trucs que je dois trouver comment payer",
+          "es": "ok hablando en serio emma quiere entrar en una sororidad en uw y es lo único de lo que habla 😅 añade eso a la lista de cosas que tengo que averiguar cómo pagar",
+          "de": "ok mal ehrlich emma will in eine Verbindung an der UW und redet nur noch davon 😅 noch was auf der Liste von Dingen für die ich irgendwie bezahlen muss",
+          "ja": "正直エマがUWのソロリティに入りたくてそのことしか話さないの 😅 どうやって払うか考えないといけないリストにまた追加ね"
+        }
       }
-    }  ]
+    }
+  ]
 }

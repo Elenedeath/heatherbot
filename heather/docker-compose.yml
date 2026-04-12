@@ -6,7 +6,7 @@ x-hf-env: &hf-env
   HF_TOKEN: CHANGE_ME
 
 services:
-  # ─── Heather Bot ─────────────────────────────────────────────────────────────-──
+  # ─── Heather Bot ────────────────────────────────────────────────────────────────
   heather:
     build:
       context: .
@@ -25,9 +25,6 @@ services:
       TELEGRAM_API_ID: "CHANGE_ME"
       TELEGRAM_API_HASH: "CHANGE_ME"
 
-      # Admin Telegram user ID (your personal account numeric ID)
-      ADMIN_USER_ID: "CHANGE_ME"
-
       # Telethon Imports
       SESSION_NAME: "/app/sessions/heather_session"
 
@@ -38,7 +35,7 @@ services:
       # Payment bot @username (no @ prefix) — used in tip messages
       PAYMENT_BOT_USERNAME: "CHANGE_ME"
 
-      # ── Models Configuration ────────────────────────────────────────────────
+      # ── Models Configuration ────────────────────────────────────────────────────
       # if true 12B SMALL else 70B FULL
       SMALL_MODEL_MODE: "false"
 
@@ -75,6 +72,21 @@ services:
 
       # ComfyUI face-swap source image path (for image generation)
       COMFYUI_FACE_IMAGE: "/data/comfyui-input/heather_face.png"
+
+      # ── HeatherBot Configuration ────────────────────────────────────────────────
+      LOG_DIR: "/app/logs"
+
+      # ── Discord Story Poster ────────────────────────────────────────────────────
+      # Set your Discord bot token to enable daily story posting (leave CHANGE_ME to disable)
+      DISCORD_TOKEN: "CHANGE_ME"
+      STORIES_CHANNEL_NAME: "stories"
+      TELEGRAM_USERNAME: "CHANGE_ME"
+
+      # ── Cohort Watchdog ─────────────────────────────────────────────────────────
+      # Set to "true" to enable daily cohort reports
+      ENABLE_COHORT_WATCHDOG: "true"
+      BOT_DIR: "/data"
+      REPORT_DIR: "/data/reports"
 
     volumes:
       - /mnt/fast/heatherbot/data/sessions:/app/sessions

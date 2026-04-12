@@ -9,7 +9,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
 RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 
 COPY . .
-RUN chmod +x /app/wait-for-llama.sh
+RUN chmod +x /app/entrypoint.sh
 
 EXPOSE 8888
-CMD ["sh", "/app/wait-for-llama.sh"]
+CMD ["sh", "/app/entrypoint.sh"]

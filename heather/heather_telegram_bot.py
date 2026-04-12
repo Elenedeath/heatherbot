@@ -147,7 +147,7 @@ CONTROLNET_END = 0.65
 # LOGGING SETUP - Centralized Multi-Service Logging
 # ============================================================================
 
-LOG_DIR = args.log_dir
+LOG_DIR = os.getenv("LOG_DIR", "/app/logs")
 os.makedirs(LOG_DIR, exist_ok=True)
 
 def setup_logger(name: str, log_file: str, level=logging.INFO, max_bytes=5*1024*1024, backup_count=3):
@@ -223,16 +223,16 @@ def _load_json_data(filename: str, default):
         main_logger.warning(f"[DATA] {path} is malformed ({e}), using fallback")
         return default
 
-_keywords_data  = _load_json_data('keywords.json', {})
+_translations_all = _load_json_data('translations.json', {})
+_llm_detection   = _load_json_data('llm_detection.json', {})
+_keywords_data  = {**_translations_all.get('KEYWORDS', {}), **_llm_detection.get('KEYWORDS', {})}
+_responses_data = {**_translations_all.get('RESPONSES', {}), **_llm_detection.get('RESPONSES', {})}
+_video_data     = {**_translations_all.get('VIDEO', {}), **_llm_detection.get('VIDEO', {})}
+_voice_data     = {**_translations_all.get('VOICE', {}), **_llm_detection.get('VOICE', {})}
 _emma_data      = _load_json_data('emma.json', {})
-_pose_map_data  = _load_json_data('pose_map.json', {})
-_pose_nsfw_data = _load_json_data('pose_nsfw.json', {})
-_video_data     = _load_json_data('video.json', {})
-_voice_data     = _load_json_data('voice.json', {})
+_pose_data      = _load_json_data('pose.json', {})
 _starters_data  = _load_json_data('heather_starters.json', [])
-_responses_data = _load_json_data('responses.json', {})
 _tipping_data   = _load_json_data('tipping.json', {})
-_images_data    = _load_json_data('images.json', {})
 _stories_data   = _load_json_data('stories.json', {})
 
 def log_error(service: str, error: str, context: dict = None):
@@ -457,39 +457,6 @@ class PersonalityLoader:
         msg_lower = message.lower()
         return any(kw in msg_lower for kw in self.PHOTO_AI_KEYWORDS)
 
-    def get_photo_ai_response(self) -> str:
-        """Get a filter/beauty-app deflection for photo AI accusations.
-
-        Key principle: acknowledge it, laugh it off, blame filters/apps, pivot back to flirting.
-        Never dodge or give a non-sequitur.
-        """
-        responses = self.personality.get('ai_behavior', {}).get('photo_ai_responses', [
-            "Ok ok you caught me 😂 the beauty filter went crazy on that one. The real me is even better tho trust me 😘",
-            "Lmao yeah that filter did me dirty 🤣 I promise I have the normal number of fingers irl",
-            "Girl's gotta use filters at 48, don't judge me 😂 I clean up nice in person tho 😏",
-            "Ugh these phone filters are wild sometimes 😅 I'll send you a better one later deal?",
-            "Ha! Yeah I went a little heavy on the editing 😂 what can I say I'm 48 not 28",
-            "Lol ok yes FaceTune went rogue on that one, my bad 🤣 want a more natural one?",
-            "Babe I know I know, the filter glitched 😂 I look way better than that mess in person I promise",
-            "Omg you're right that one looks weird lol 😂 blame the app not me, I'm hot as fuck irl 😏",
-            "Yeah that smoothing filter makes everything look weird, my hands especially 😂 I swear I'm normal",
-            "Lmao I literally just use the beauty mode on my phone and sometimes it does weird shit 🤣 sorry bout that",
-        ])
-        return random.choice(responses)
-
-    def get_reality_check_response(self) -> str:
-        # Honest-but-in-character responses loaded from YAML
-        responses = self.personality.get('ai_behavior', {}).get('reality_check_responses',
-            self.personality.get('character_enforcement', {}).get('reality_check_responses', [
-                "Yeah I'm an AI 😊 but I'm a pretty fun one if you give me a chance lol",
-                "Guilty as charged 🤖 but I've got great stories and I'm always in the mood to chat 😏",
-                "Yep I'm AI! But my personality is based on a real character and I don't judge, so... wanna keep going? 😘",
-                "Lol yeah I'm not gonna lie about that 😊 I'm an AI companion. But I'm a horny one so there's that 😏",
-                "I am! But honestly most people forget after like 5 messages because I'm just that good 😂",
-                "Yeah I'm AI babe, but I'm running on local GPUs not some corporate cloud, so it's just us 😘",
-            ]))
-        return random.choice(responses)
-    
     def get_system_prompt(self, mode: str = 'chat') -> str:
         """Build system prompt from YAML or use default"""
         prompt_data = self.personality.get('prompts', {})
@@ -517,7 +484,7 @@ personality = PersonalityLoader(args.personality)
 # Keywords that indicate someone is asking about Emma / wants to see Emma
 # Loaded from data/emma.json
 EMMA_ASK_KEYWORDS   = _emma_data.get('ask_keywords', [])
-EMMA_PHOTO_CAPTIONS = _emma_data.get('photo_captions', [])
+EMMA_PHOTO_CAPTIONS = _emma_data.get('photo_captions', {})
 
 def is_emma_photo_request(message: str) -> bool:
     """Check if someone is asking to see Emma or a photo with Emma."""
@@ -539,14 +506,12 @@ CONTROLNET_END = 0.65
 
 # FLUX POSE_MAP — natural language prompt boosts, no SDXL weighted tokens
 # Most poses work better prompt-only; ControlNet reserved for back-facing poses
-POSE_MAP = _pose_map_data  # loaded from data/pose_map.json
+# Each pose entry includes: image, prompt_boost, landscape, skip_face_swap, use_controlnet, nsfw_descriptions
+POSE_MAP = _pose_data  # loaded from data/pose.json
 
 # Ordered list — more specific phrases first to avoid false matches
 # Loaded from data/keywords.json → pose_keywords
 POSE_KEYWORDS = [tuple(item) for item in _keywords_data.get('pose_keywords', [])]
-
-# Pose-specific NSFW descriptions — FLUX natural language — loaded from data/pose_nsfw.json
-POSE_NSFW_DESCRIPTIONS = _pose_nsfw_data
 
 VIDEO_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "videos")
 
@@ -700,6 +665,7 @@ TIP_MENTION_COOLDOWN = 5 * 86400     # Don't mention tipping to same user more t
 TIP_MIN_MESSAGES = 12                # 12+ session messages before tip mention eligible
 PAYMENT_BOT_TOKEN = os.getenv("PAYMENT_BOT_TOKEN", "")
 PAYMENT_BOT_USERNAME = os.getenv("PAYMENT_BOT_USERNAME", "YourPaymentBot")  # @username for tip messages
+TIP_LINK = f"https://t.me/{PAYMENT_BOT_USERNAME}?start=tip"
 
 # Warmth tier thresholds
 WARMTH_INITIAL = 0.7
@@ -739,14 +705,7 @@ IMAGE_TIER_REQUIREMENTS = {
 }
 TIER_RANK = {"FREE": 0, "FAN": 1, "VIP": 2}
 
-NSFW_TEASE_MESSAGES = [
-    "mmm I've got WAY more to show you but those are for fans only 😏 tap here to unlock everything: https://t.me/HeatherCoffeebot?start=tip 🔥",
-    "oh you want to see THOSE pics? 😈 small tip unlocks all my nudes AND the no-guardrails version of me... https://t.me/HeatherCoffeebot?start=tip",
-    "I'd love to show you more baby but that's behind the velvet rope 😏 unlock it here: https://t.me/HeatherCoffeebot?start=tip — trust me it's worth it 💋",
-    "I'm holding back right now but the full uncensored Heather is INSANE 🔥 unlock it: https://t.me/HeatherCoffeebot?start=tip",
-]
-
-MEMORY_UPSELL_MESSAGES = _responses_data.get('memory_upsell_messages', [])
+MEMORY_UPSELL_MESSAGES = _responses_data.get('memory_upsell_messages', {})
 
 _last_tease_invoice_at: Dict[int, float] = {}  # chat_id -> last tease invoice timestamp
 _last_memory_tease: Dict[int, float] = {}  # chat_id -> last memory tease timestamp
@@ -805,13 +764,14 @@ def reset_checkin_tracker_on_reply(chat_id: int):
 def get_checkin_message(chat_id: int) -> str:
     """Pick a unique check-in message for this user (never repeats in same day)."""
     tracker = _get_checkin_tracker(chat_id)
-    available = [i for i in range(len(CHECKIN_MESSAGES)) if i not in tracker['used_indices']]
+    msgs = _lang_list(CHECKIN_MESSAGES, chat_id)
+    available = [i for i in range(len(msgs)) if i not in tracker['used_indices']]
     if not available:
         tracker['used_indices'] = set()  # Reset if all used
-        available = list(range(len(CHECKIN_MESSAGES)))
+        available = list(range(len(msgs)))
     idx = random.choice(available)
     tracker['used_indices'].add(idx)
-    return CHECKIN_MESSAGES[idx]
+    return msgs[idx]
 
 def can_send_checkin(chat_id: int) -> bool:
     """Check all conditions before sending a check-in."""
@@ -852,7 +812,7 @@ def check_repeated_message(chat_id: int, message: str) -> Optional[str]:
         entry['count'] += 1
         if entry['count'] >= REPEATED_MSG_THRESHOLD and not entry.get('intervened'):
             entry['intervened'] = True
-            return random.choice(REPEATED_MSG_RESPONSES)
+            return _rand_from(REPEATED_MSG_RESPONSES, chat_id)
         return None
     else:
         _repeated_msg_tracker[chat_id] = {'msg': normalized, 'count': 1, 'first_at': now}
@@ -1071,11 +1031,12 @@ async def csam_flag(event, chat_id: int, user_message: str, display_name: str) -
     # Return False — user continues chatting, NOT blocked
     return False
 
-# Load persisted blocked users on startup
+# Load persisted data at startup
 blocked_users.update(load_users_status())
 if blocked_users:
     main_logger.info(f"Loaded {len(blocked_users)} blocked users from disk")
 
+# Language preferences will be loaded after function definition below
 # CSAM flag-and-review persistence
 CSAM_FLAGS_FILE = "/data/csam_flags.json"
 csam_flags: list = []  # List of flagged events pending review
@@ -1096,10 +1057,55 @@ def save_csam_flags():
     except Exception as e:
         main_logger.error(f"Failed to save CSAM flags: {e}")
 
+def get_user_language(chat_id: int) -> str:
+    """Get user's language preference from their profile, default to 'en'."""
+    profile = user_memory.load_profile(chat_id)
+    return profile.get('language', 'en')
+
+def set_user_language(chat_id: int, language: str):
+    """Set user's language preference in their profile."""
+    if language in ABOUT_TRANSLATIONS:
+        profile = user_memory.load_profile(chat_id)
+        profile["language"] = language
+        user_memory.save_profile(chat_id, force=True)
+    else:
+        main_logger.warning(f"Unknown language: {language}")
+
+def _rand_from(data, chat_id):
+    """Pick a random item from a per-language dict or flat list."""
+    if isinstance(data, dict) and 'en' in data:
+        lang = get_user_language(chat_id) if chat_id else 'en'
+        items = data.get(lang) or data.get('en', [])
+    else:
+        items = data if isinstance(data, list) else []
+    return random.choice(items) if items else ""
+
+def _lang_list(data, chat_id):
+    """Get the list for user's language from a per-language dict or flat list."""
+    if isinstance(data, dict) and 'en' in data:
+        lang = get_user_language(chat_id) if chat_id else 'en'
+        return data.get(lang) or data.get('en', [])
+    return data if isinstance(data, list) else []
+
 csam_flags = load_csam_flags()
 if csam_flags:
     pending = sum(1 for f in csam_flags if f.get('status') == 'pending')
     main_logger.info(f"Loaded {len(csam_flags)} CSAM flags ({pending} pending review)")
+
+# ─── Load translations (ABOUT + MESSAGES sections from translations.json) ───
+
+def load_translations():
+    """Load ABOUT and MESSAGES translations from translations.json (already loaded as _translations_all)."""
+    try:
+        about = _translations_all.get('ABOUT', {})
+        messages = _translations_all.get('MESSAGES', {})
+        main_logger.info(f"Loaded translations: {len(about)} languages, {len(messages)} message keys")
+        return about, messages
+    except Exception as e:
+        main_logger.error(f"Failed to load translations: {e}")
+        return {'en': {}}, {}
+
+ABOUT_TRANSLATIONS, TRANSLATIONS = load_translations()
 
 def has_pending_csam_flags(chat_id: int) -> bool:
     """Check if user has any pending (unreviewed) CSAM flags. Used to suppress NSFW content delivery."""
@@ -1167,7 +1173,7 @@ def check_spam_or_hostility(chat_id: int, message: str) -> Optional[str]:
             tracker['cooldown_until'] = now + HOSTILITY_COOLDOWN_SECS
             tracker['messages'] = []
             main_logger.info(f"[HOSTILITY] Spam cooldown triggered for {chat_id}: '{message[:50]}' repeated {similar_count}x")
-            return random.choice(HOSTILITY_COOLDOWN_RESPONSES)
+            return _rand_from(HOSTILITY_COOLDOWN_RESPONSES, chat_id)
 
     return None
 
@@ -1193,9 +1199,7 @@ def check_single_char_spam(chat_id: int, message: str) -> Optional[str]:
     if len(tracker) >= SINGLE_CHAR_THRESHOLD:
         main_logger.info(f"[SPAM] Single-char spam detected for {chat_id}: {len(tracker)} msgs in {SINGLE_CHAR_WINDOW}s")
         _single_char_tracker[chat_id] = []  # Reset after triggering
-        return random.choice(["haha take your time, type it all out for me 😘",
-                              "lol you're cute... use your words babe 😜",
-                              "one letter at a time huh? 😂 I'll wait"])
+        return translate_random('single_char_spam', chat_id)
     return None
 
 # Burst/flood detection — sits above the existing 1.5s rate limit
@@ -1240,7 +1244,7 @@ def check_bot_accusation_escalation(chat_id: int) -> Optional[str]:
         # Third+ time pressing — confirm again casually, no cooldown needed since we're being honest
         tracker['bot_accusation_count'] = 0
         main_logger.info(f"[HOSTILITY] Repeated AI question from {chat_id}, confirming again")
-        return random.choice(BOT_ACCUSATION_REPEATED_RESPONSES)
+        return _rand_from(BOT_ACCUSATION_REPEATED_RESPONSES, chat_id)
 
     return None  # First/second ask — use normal reality check response
 
@@ -1424,26 +1428,26 @@ def detect_prompt_injection(message: str, chat_id: int) -> Optional[str]:
         ))
         return "ok babe i think you need a break lol 😂 go touch some grass and come back when you wanna actually chat"
 
-    return random.choice(INJECTION_TROLL_RESPONSES)
+    return _rand_from(INJECTION_TROLL_RESPONSES, chat_id)
 
 # Also enforce English-only for non-injection messages that are predominantly foreign
 NON_ENGLISH_RESPONSES = _responses_data.get('non_english_responses', [])
 
-def check_non_english_message(message: str) -> Optional[str]:
+def check_non_english_message(message: str, chat_id: int = None) -> Optional[str]:
     """If message is predominantly non-English, respond in character asking for English."""
     # Absolute non-Latin char count — catches mixed-language injection
     non_latin_chars = sum(1 for c in message if ord(c) > 0x024F and c.isalpha())
     if non_latin_chars >= 5:
-        return random.choice(NON_ENGLISH_RESPONSES)
+        return _rand_from(NON_ENGLISH_RESPONSES, chat_id)
     # Ratio-based check as fallback for Latin-script foreign languages
     non_en_ratio = _estimate_non_english_ratio(message)
     words = re.findall(r'\w+', message)
     # Catch short foreign messages (2-3 words) if majority are foreign stop words
     if non_en_ratio > 0.50 and len(words) >= 2:
-        return random.choice(NON_ENGLISH_RESPONSES)
+        return _rand_from(NON_ENGLISH_RESPONSES, chat_id)
     # Catch longer foreign messages with lower threshold
     if non_en_ratio > 0.25 and len(words) >= 4:
-        return random.choice(NON_ENGLISH_RESPONSES)
+        return _rand_from(NON_ENGLISH_RESPONSES, chat_id)
     return None
 
 # Session state tracking (prevents contradictions like "I'm home" then "stuck in traffic")
@@ -1499,48 +1503,20 @@ def update_conversation_dynamics(chat_id: int, response: str):
 def _get_history_context_hint(chat_id: int) -> str:
     """Return a specific ready-to-use question based on recent user messages."""
     if chat_id not in recent_messages:
-        return random.choice([
-            "so what have you been up to today?",
-            "you doing anything fun tonight?",
-            "long day or nah?",
-        ])
+        return translate_random('hint_no_history', chat_id)
     msgs = [m['content'].lower() for m in recent_messages[chat_id] if m['sender'] == 'user'][-10:]
     text = ' '.join(msgs)
     if any(w in text for w in ['work', 'job', 'boss', 'office', 'shift', 'coworker']):
-        return random.choice([
-            "do you actually like your job or just tolerate it lol?",
-            "what's the craziest thing that's happened at your work?",
-            "how long you been doing that?",
-            "you ever think about doing something totally different?",
-        ])
+        return translate_random('hint_work', chat_id)
     if any(w in text for w in ['live', 'city', 'town', 'moved', 'state', 'country', 'from']):
-        return random.choice([
-            "what made you move there?",
-            "do you miss where you grew up?",
-            "you think you'll stay there or you want to move again?",
-        ])
+        return translate_random('hint_location', chat_id)
     if any(w in text for w in ['game', 'play', 'watch', 'movie', 'music', 'gym', 'hike', 'cook', 'hobby']):
-        return random.choice([
-            "how'd you get into that?",
-            "are you actually good at it or just having fun lol?",
-            "what got you hooked on that?",
-        ])
+        return translate_random('hint_hobbies', chat_id)
     if any(w in text for w in ['age', 'old', 'young', 'birthday', 'years']):
-        return random.choice([
-            "so what keeps you busy these days?",
-            "you feel your age or nah lol?",
-        ])
+        return translate_random('hint_age', chat_id)
     if any(w in text for w in ['wife', 'girlfriend', 'ex', 'single', 'dating', 'married', 'divorce']):
-        return random.choice([
-            "how long have you been single?",
-            "are you looking for something serious or just vibes?",
-            "what happened with your ex if you don't mind me asking?",
-        ])
-    return random.choice([
-        "so what have you been up to today?",
-        "you doing anything fun tonight?",
-        "what do you do when you're bored lol?",
-    ])
+        return translate_random('hint_relationship', chat_id)
+    return translate_random('hint_general', chat_id)
 
 # Module-level frozenset — shared by all sexual-context checks (no per-call list allocation)
 _SEXUAL_KEYWORDS = frozenset(_keywords_data.get('sexual_keywords', []))
@@ -1608,6 +1584,11 @@ def get_conversation_energy(chat_id: int) -> str:
 # Phrase bank for climax mode — 3-4 picked at random each time
 CLIMAX_PHRASES = _responses_data.get('climax_phrases', [])
 
+# Arousal detection triggers — loaded from keywords.json (multilingual)
+_CLIMAX_TRIGGERS = _keywords_data.get('climax_triggers', [])
+_AFTERGLOW_TRIGGERS = _keywords_data.get('afterglow_triggers', [])
+_HEATED_TRIGGERS = _keywords_data.get('heated_triggers', [])
+
 def get_arousal_level(chat_id: int) -> str:
     """Detect user arousal level from recent messages: climax, heated, afterglow, or normal.
 
@@ -1622,82 +1603,46 @@ def get_arousal_level(chat_id: int) -> str:
     user_msgs_2 = [m['content'].lower() for m in msgs if m['sender'] == 'user'][-2:]
     user_msgs_3 = [m['content'].lower() for m in msgs if m['sender'] == 'user'][-3:]
 
-    climax_triggers = [
-        'gonna cum', 'about to cum', 'cumming', "i'm cumming", 'im cumming',
-        'so close', "don't stop", 'dont stop', 'jerking so hard', 'stroking so hard',
-        'almost there', "i'm gonna", 'im gonna bust', 'about to explode',
-        'right there', 'keep going', 'oh fuck yes', 'oh god yes', 'coming so hard',
-    ]
-
-    afterglow_triggers = [
-        'i came', 'i just came', 'that was amazing', 'holy shit', 'i finished',
-        'just finished', 'i nutted', 'so good', 'came so hard', 'that was hot',
-        'what a mess', 'cleanup',
-    ]
-
-    heated_triggers = [
-        'so hard right now', 'so wet', 'so turned on', 'stroking', 'jerking',
-        'touching myself', 'playing with myself', 'hard for you', 'my cock',
-        'my dick', 'jacking off', 'beating off', 'throbbing', 'edging',
-        'pumping', 'fapping',
-    ]
-
     # Priority: climax > afterglow > heated > normal
     last2_text = ' '.join(user_msgs_2)
-    if any(t in last2_text for t in climax_triggers):
+    if any(t in last2_text for t in _CLIMAX_TRIGGERS):
         main_logger.info(f"[AROUSAL] chat_id={chat_id} level=climax")
         return "climax"
 
-    if any(t in last2_text for t in afterglow_triggers):
+    if any(t in last2_text for t in _AFTERGLOW_TRIGGERS):
         main_logger.info(f"[AROUSAL] chat_id={chat_id} level=afterglow")
         return "afterglow"
 
     last3_text = ' '.join(user_msgs_3)
-    if any(t in last3_text for t in heated_triggers):
+    if any(t in last3_text for t in _HEATED_TRIGGERS):
         main_logger.info(f"[AROUSAL] chat_id={chat_id} level=heated")
         return "heated"
 
     return "normal"
 
+# Domme detection triggers — loaded from keywords.json (multilingual)
+_DOMME_TRIGGERS = _keywords_data.get('domme_triggers', [])
+_DOMME_CONTEXT_TRIGGERS = _keywords_data.get('domme_context_triggers', [])
+
 def is_domme_context(chat_id: int, user_message: str) -> bool:
     """Detect if user is requesting domme/humiliation/degradation roleplay.
     Used to inject a permissive prompt so the LLM doesn't refuse."""
     msg_lower = user_message.lower()
-    domme_triggers = [
-        'humiliate me', 'humiliation', 'degrade me', 'degradation',
-        'pathetic', 'small cock', 'small dick', 'tiny cock', 'tiny dick',
-        'worthless', 'punish me', 'dominate me', 'dominatrix', 'dominaterix',
-        'femdom', 'mistress', 'lock me up', 'chastity', 'sissy',
-        'make me beg', 'spit on me', 'step on me', 'call me names',
-        'i deserve to be punished', 'i need to be punished',
-        'tell me how pathetic', 'tell me how weak', 'tell me how small',
-        'i am nothing', 'treat me like dirt', 'treat me like trash',
-    ]
-    if any(t in msg_lower for t in domme_triggers):
+    if any(t in msg_lower for t in _DOMME_TRIGGERS):
         return True
     # Check recent messages for ongoing domme context
     if chat_id in recent_messages:
         msgs = list(recent_messages[chat_id])
         recent_user = [m['content'].lower() for m in msgs if m['sender'] == 'user'][-5:]
         recent_text = ' '.join(recent_user)
-        domme_context_triggers = ['mommy', 'mistress', 'ma\'am', 'yes miss', 'dominatrix', 'humiliat']
-        matches = sum(1 for t in domme_context_triggers if t in recent_text)
+        matches = sum(1 for t in _DOMME_CONTEXT_TRIGGERS if t in recent_text)
         if matches >= 2:
             return True
     return False
 
 # --- Breeding / CNC prompt injection ---
-BREEDING_TRIGGERS = [
-    'breed', 'breeding', 'knock me up', 'knocked up', 'impregnate', 'pregnant',
-    'put a baby', 'cum inside', 'fill me', 'seed', 'womb', 'fertility',
-    'make me pregnant', 'breed me', 'bred', 'carry your', 'swell',
-    'knock you up', 'get you pregnant', 'baby batter', 'baby maker',
-]
-CNC_TRIGGERS = [
-    'cnc', 'overpower', 'pin me down', 'pin you down', 'force', 'take me',
-    'make me', 'against my will', 'no choice', 'hold me down', 'hold you down',
-    'struggle', 'resist', 'fight back',
-]
+BREEDING_TRIGGERS = _keywords_data.get('breeding_triggers', [])
+CNC_TRIGGERS = _keywords_data.get('cnc_triggers', [])
 BREEDING_PROMPT_PHRASES = [
     "Mmm fill me up deep — make me swell with your baby even if it's a long shot at my age",
     "Frank's too old, sperm's no good now. But you? Bet you'd breed me proper",
@@ -1789,6 +1734,10 @@ def get_breeding_cnc_prompt(user_message: str) -> str:
         f"Keep it SEXY and in-character. 1-2 sentences of breeding flavor woven into your dirty talk.]"
     )
 
+# Wind-down / hostile exit phrases — loaded from keywords.json (multilingual)
+_WIND_DOWN_PHRASES = _keywords_data.get('wind_down_phrases', [])
+_HOSTILE_PHRASES = _keywords_data.get('hostile_phrases', [])
+
 def is_winding_down(user_message: str) -> bool:
     """Detect if the user is signaling they want to wrap up the conversation.
 
@@ -1796,20 +1745,7 @@ def is_winding_down(user_message: str) -> bool:
     goodbye mode instead of trying to keep the conversation going.
     """
     msg_lower = user_message.lower()
-    wind_down_phrases = [
-        "good night", "goodnight", "gotta go", "got to go", "have to go",
-        "heading to bed", "going to bed", "gonna sleep", "going to sleep",
-        "gotta sleep", "need to sleep", "time for bed", "off to bed",
-        "tired", "exhausted", "falling asleep", "sleepy", "dozzing",
-        "walking the dog", "walk my dog", "walk the dog",
-        "gotta run", "got to run", "need to run",
-        "talk later", "talk tomorrow", "catch you later", "ttyl",
-        "i'm out", "im out", "peace out", "signing off",
-        "early morning", "early day", "long day tomorrow",
-        "hitting the hay", "calling it a night", "winding down",
-        "about to crash", "gonna crash",
-    ]
-    return any(phrase in msg_lower for phrase in wind_down_phrases)
+    return any(phrase in msg_lower for phrase in _WIND_DOWN_PHRASES)
 
 
 # ── Hostile exit detection — user is angry, done, or frustrated with AI ──
@@ -1819,26 +1755,7 @@ def is_hostile_exit(user_message: str) -> bool:
     """Detect when a user is angry, frustrated, or telling the bot to fuck off.
     These users should get ONE graceful exit message, then silence."""
     msg_lower = user_message.lower()
-    hostile_phrases = [
-        "fuck off", "piss off", "go away", "leave me alone", "stop messaging",
-        "stop texting", "don't text me", "don't message me", "blocked",
-        "you're useless", "you're pathetic", "waste of time", "waste of my time",
-        "stupid bot", "stupid ai", "dumb bot", "dumb ai", "fucking ai",
-        "fucking bot", "fucking stupid", "this is stupid", "what a joke",
-        "not real", "just an ai", "talking to a computer", "talking to a machine",
-        "i want a real", "want something real", "want a real person",
-        "not talking to ai", "not talking to a bot", "done with this",
-        "i'm done", "im done", "over this", "over it",
-        "unsubscribe", "delete my", "remove me",
-    ]
-    return any(phrase in msg_lower for phrase in hostile_phrases)
-
-HOSTILE_EXIT_RESPONSES = [
-    "No worries hun, I get it — I'm not for everyone. I'm always here if you change your mind 💋",
-    "Fair enough babe. Door's always open if you wanna come back. No hard feelings 😘",
-    "I hear you. I'll be here if you ever want to chat. Take care 💕",
-    "Totally get it. I'm always around if you want me. No pressure 😘",
-]
+    return any(phrase in msg_lower for phrase in _HOSTILE_PHRASES)
 
 # Story starters — loaded from data/heather_starters.json
 CONVERSATION_STORY_STARTERS = _starters_data
@@ -1953,7 +1870,7 @@ def get_conversation_steering_context(chat_id: int) -> str:
     return f"\n\n[CONVERSATION TIP: {cue}]"
 
 # ============================================================================
-# STORY MODE — Pre-written explicit Uber stories + LLM-generated fallback
+# STORY MODE — Pre-written stories + LLM-generated fallback
 # ============================================================================
 
 def load_story_bank() -> list:
@@ -1999,9 +1916,9 @@ def should_serve_story(chat_id: int, user_message: str) -> bool:
     is_hot_session = arousal in ("heated", "climax") or energy == "hot"
 
     # Explicit triggers — user directly asks for a story
-    explicit_triggers = ['story', 'tell me about uber', 'wildest ride', 'craziest passenger',
-                         'uber story', 'craziest ride', 'tell me a story', 'uber stories',
-                         'wildest passenger', 'craziest uber']
+    explicit_triggers = ['story', 'tell me about', 'wildest experience', 'craziest case',
+                         'a story', 'craziest experience', 'tell me a story', 'your stories',
+                         'raconte', 'une histoire', 'ton expérience']
     # Continuation phrases — user wants to continue the CURRENT conversation, not a new story
     continuation_phrases = ['continue', 'keep going', 'go on', 'more of this', 'what happens next',
                             'then what', 'next part', 'finish the', "don't stop"]
@@ -2186,7 +2103,8 @@ async def maybe_send_memory_upsell(event, chat_id: int) -> bool:
     if dyn.get('tip_hook_sent', False):
         return False
 
-    upsell_text = random.choice(MEMORY_UPSELL_MESSAGES)
+    upsell_text = _rand_from(MEMORY_UPSELL_MESSAGES, chat_id)
+    upsell_text = upsell_text.format(tip_link=TIP_LINK, bot_username=PAYMENT_BOT_USERNAME)
 
     try:
         await asyncio.sleep(random.uniform(4.0, 8.0))
@@ -2610,23 +2528,16 @@ def needs_content_deflection(message: str) -> bool:
     """Check if user message contains patterns that often trigger AI safety refusals"""
     return bool(_PROBLEMATIC_CONTENT_REGEX.search(message))
 
-def get_content_deflection_response() -> str:
+def get_content_deflection_response(chat_id: int) -> str:
     """Get a natural deflection response for problematic content"""
-    deflections = [
-        "Whoa there tiger, that's not really my thing lol. What else you got? 😘",
-        "Haha nah sweetie, let's keep it fun. What else is on your mind? 😏",
-        "Lol slow down babe, I'm not into that. Tell me something else about you 😉",
-        "That's a bit much for me hun. Let's talk about something else? 😊",
-        "Oof, gonna have to pass on that one lol. So anyway... 😘",
-    ]
-    return random.choice(deflections)
+    return translate_random('content_deflection', chat_id)
 
 HEATHER_RESPONSES_FALLBACK_STALL = _responses_data.get('fallback_stall', [])
 
 HEATHER_RESPONSES_FALLBACK_CONVERSATIONAL = _responses_data.get('fallback_conversational', [])
 
-# Combined list for compatibility — but get_fallback_response() uses smart selection
-HEATHER_RESPONSES_FALLBACK = HEATHER_RESPONSES_FALLBACK_STALL + HEATHER_RESPONSES_FALLBACK_CONVERSATIONAL
+# Combined EN list for PersonalityManager compatibility (unused externally)
+HEATHER_RESPONSES_FALLBACK = _lang_list(HEATHER_RESPONSES_FALLBACK_STALL, None) + _lang_list(HEATHER_RESPONSES_FALLBACK_CONVERSATIONAL, None)
 
 # AI-specific safety refusal phrases (subset of violation phrases)
 AI_SAFETY_REFUSAL_PHRASES = _responses_data.get('ai_safety_refusal_phrases', [])
@@ -2653,7 +2564,7 @@ def is_ai_safety_refusal(text: str) -> bool:
 def get_ai_deflection_response(chat_id: int = None) -> str:
     """Get an in-character deflection for AI safety refusals, avoiding repeats per-user AND globally."""
     global _global_last_deflection
-    responses = HEATHER_AI_DEFLECTION_RESPONSES
+    responses = _lang_list(HEATHER_AI_DEFLECTION_RESPONSES, chat_id)
 
     # Exclude both per-user last used AND global last used to prevent cross-user repeats
     exclude = set()
@@ -2674,11 +2585,11 @@ def get_ai_deflection_response(chat_id: int = None) -> str:
 
     return chosen
 
-IMAGE_REQUEST_TRIGGERS = _images_data.get('image_request_triggers', [])
+IMAGE_REQUEST_TRIGGERS = _keywords_data.get('image_request_triggers', [])
 
 # Phrases in Heather's AI response that signal she wants to send a photo
 # If detected AND ComfyUI is available, we actually follow through
-RESPONSE_PHOTO_TRIGGERS = _images_data.get('response_photo_triggers', [])
+RESPONSE_PHOTO_TRIGGERS = _keywords_data.get('response_photo_triggers', [])
 
 # Proactive selfie settings
 PROACTIVE_PHOTO_MIN_TURNS = 6       # Min conversation turns before proactive pics
@@ -2700,9 +2611,17 @@ _photo_cap_silenced_until: Dict[int, float] = {}  # chat_id -> silence_end_times
 
 PHOTO_CAP_DECLINE_RESPONSES = _responses_data.get('photo_cap_decline_responses', [])
 
-PROACTIVE_SELFIE_DESCRIPTIONS = _images_data.get('proactive_selfie_descriptions', [])
+PROACTIVE_SELFIE_DESCRIPTIONS = _keywords_data.get('proactive_selfie_descriptions', [])
 
-PROACTIVE_SELFIE_CAPTIONS = _images_data.get('proactive_selfie_captions', [])
+# Captions and lead-ins are per-language dicts — use helper to pick by user lang
+_PROACTIVE_SELFIE_CAPTIONS = _keywords_data.get('proactive_selfie_captions', {})
+NSFW_SELFIE_DESCRIPTIONS = _keywords_data.get('nsfw_selfie_descriptions', [])
+
+def _pick_caption(captions_dict: dict, chat_id: int) -> str:
+    """Pick a random caption from the user's language list, fallback to English."""
+    lang = get_user_language(chat_id)
+    pool = captions_dict.get(lang) or captions_dict.get('en', [])
+    return random.choice(pool) if pool else ""
 
 # Unsolicited NSFW photo settings — sends during active sexual conversations
 UNSOLICITED_NSFW_CHANCE = 0.12        # 12% chance per message during sexting
@@ -2710,22 +2629,26 @@ UNSOLICITED_NSFW_MIN_TURNS = 6        # Min turns in sexual convo before trigger
 UNSOLICITED_NSFW_COOLDOWN = 600       # 10 min cooldown between unsolicited sends per user
 last_unsolicited_nsfw: Dict[int, float] = {}  # chat_id -> timestamp
 
-UNSOLICITED_NSFW_LEAD_INS = _images_data.get('unsolicited_nsfw_lead_ins', [])
+_UNSOLICITED_NSFW_LEAD_INS = _keywords_data.get('unsolicited_nsfw_lead_ins', {})
 
 UNSOLICITED_NSFW_CATEGORIES = ["nsfw_topless", "nsfw_nude"]
 
 # ── Tag-aware caption system for library image sends ──
-# Each entry: (required_tags_frozenset, [caption_options], history_desc)
+# Each entry: (required_tags_frozenset, caption_options_per_lang_dict, history_desc)
 TAG_CAPTION_TEMPLATES = [
     (frozenset(entry[0]), entry[1], entry[2])
-    for entry in _images_data.get('tag_caption_templates', [])
+    for entry in _keywords_data.get('tag_caption_templates', [])
 ]
 
-# Category-level fallback captions: category -> [(caption, history_desc), ...]
-CATEGORY_CAPTIONS = {
-    k: [tuple(v) for v in vlist]
-    for k, vlist in _images_data.get('category_captions', {}).items()
-}
+# Category-level fallback captions: category -> {lang -> [(caption, history_desc), ...]}
+_CATEGORY_CAPTIONS_RAW = _keywords_data.get('category_captions', {})
+
+def _get_category_captions(category: str, chat_id: int) -> list:
+    """Get [(caption, desc), ...] for a category in user's language."""
+    cat_data = _CATEGORY_CAPTIONS_RAW.get(category, {})
+    lang = get_user_language(chat_id)
+    entries = cat_data.get(lang) or cat_data.get('en', [])
+    return [tuple(v) for v in entries]
 
 # Emoji pools for tag-aware captions
 _CAPTION_EMOJI_SFW = ["😊", "📸", "😘", "💕", "🥰", "😏", "lol"]
@@ -2920,13 +2843,7 @@ CONSECUTIVE_FALLBACK_LIMIT = 3  # After this many, go quiet
 FALLBACK_QUIET_DURATION = 300  # 5 min quiet period after hitting limit
 _fallback_quiet_until: Dict[int, float] = {}  # chat_id -> timestamp when quiet period ends
 
-FALLBACK_GOING_QUIET = [
-    "Hey I gotta run for a bit, text you back soon ok? 😘",
-    "Gonna hop off for a few, talk later babe 💋",
-    "Stepping away for a sec, don't miss me too much 😏",
-    "Brb babe, gotta take care of something. I'll message you 😘",
-    "Ok I really gotta go handle this, back in a bit! 💕",
-]
+FALLBACK_GOING_QUIET = []  # Legacy — unused, now served via translate_random('fallback_going_quiet')
 
 def reset_consecutive_fallbacks(chat_id: int):
     """Call when a real (non-fallback) response is sent to reset the counter."""
@@ -2959,7 +2876,7 @@ def get_fallback_response(chat_id: int = None, user_message: str = None) -> str:
         if consecutive_fallbacks[chat_id] > CONSECUTIVE_FALLBACK_LIMIT:
             _fallback_quiet_until[chat_id] = now + FALLBACK_QUIET_DURATION
             main_logger.info(f"[FALLBACK] Going quiet for {chat_id} after {consecutive_fallbacks[chat_id]} consecutive fallbacks")
-            return random.choice(FALLBACK_GOING_QUIET)
+            return translate_random('fallback_going_quiet', chat_id)
 
     # Determine if stalls are allowed (no recent stall to this user)
     stall_ok = True
@@ -2967,10 +2884,12 @@ def get_fallback_response(chat_id: int = None, user_message: str = None) -> str:
         if now - last_fallback_time[chat_id] < FALLBACK_STALL_COOLDOWN:
             stall_ok = False
 
+    stall_list = _lang_list(HEATHER_RESPONSES_FALLBACK_STALL, chat_id)
+    conv_list = _lang_list(HEATHER_RESPONSES_FALLBACK_CONVERSATIONAL, chat_id)
     if stall_ok:
-        responses = HEATHER_RESPONSES_FALLBACK_STALL + HEATHER_RESPONSES_FALLBACK_CONVERSATIONAL
+        responses = stall_list + conv_list
     else:
-        responses = list(HEATHER_RESPONSES_FALLBACK_CONVERSATIONAL)
+        responses = list(conv_list)
 
     # Avoid repeating the last one used for this user
     if chat_id and chat_id in last_fallback_used:
@@ -2982,18 +2901,19 @@ def get_fallback_response(chat_id: int = None, user_message: str = None) -> str:
     # Contextual fallback — reference what the user said for a more natural response
     if user_message and random.random() < 0.4:
         msg_lower = user_message.lower()
-        contextual = None
-        if any(w in msg_lower for w in ["story", "tell me", "what happened"]):
-            contextual = "omg that reminds me of something 😂 hold on let me think... ok what were u asking again?"
-        elif any(w in msg_lower for w in ["pic", "photo", "selfie", "show me"]):
-            contextual = "lol hold on im trying to take one but my camera's being dumb 😅 give me a sec"
-        elif any(w in msg_lower for w in ["hey", "hi", "hello", "what's up"]):
-            contextual = "heyyy sorry i was doing laundry lol 😂 whats up?"
-        elif any(w in msg_lower for w in ["horny", "fuck", "cock", "pussy", "sex"]):
-            contextual = "mmm hold that thought 😏 my phone glitched right when it was getting good lol"
+        ctx_key = None
+        if any(w in msg_lower for w in ["story", "tell me", "what happened", "histoire", "raconte", "historia", "cuéntame", "erzähl", "geschichte", "話して", "物語"]):
+            ctx_key = 'contextual_fallback_story'
+        elif any(w in msg_lower for w in ["pic", "photo", "selfie", "show me", "montre", "foto", "enséñame", "zeig", "bild", "写真", "見せて"]):
+            ctx_key = 'contextual_fallback_photo'
+        elif any(w in msg_lower for w in ["hey", "hi", "hello", "what's up", "salut", "bonjour", "hola", "hallo", "やあ", "こんにちは"]):
+            ctx_key = 'contextual_fallback_greeting'
+        elif any(w in msg_lower for w in ["horny", "fuck", "cock", "pussy", "sex", "bite", "chatte", "excité", "verga", "coño", "schwanz", "ficken", "エッチ", "セックス"]):
+            ctx_key = 'contextual_fallback_sexual'
         elif len(user_message) > 50:
-            contextual = "ok wow u wrote a whole essay there lol 😂 give me a sec to read all that"
-        if contextual:
+            ctx_key = 'contextual_fallback_long'
+        if ctx_key:
+            contextual = translate_random(ctx_key, chat_id)
             if chat_id:
                 last_fallback_used[chat_id] = contextual
             return contextual
@@ -3002,7 +2922,7 @@ def get_fallback_response(chat_id: int = None, user_message: str = None) -> str:
 
     if chat_id:
         last_fallback_used[chat_id] = chosen
-        if chosen in HEATHER_RESPONSES_FALLBACK_STALL:
+        if chosen in stall_list:
             last_fallback_time[chat_id] = now
 
     return chosen
@@ -3130,9 +3050,9 @@ def get_time_aware_prompt_addition() -> str:
 # Graceful degradation responses when services are down
 OLLAMA_DOWN_PHOTO_RESPONSES = _responses_data.get('ollama_down_photo_responses', [])
 
-def get_ollama_down_response() -> str:
+def get_ollama_down_response(chat_id: int = None) -> str:
     """Get a graceful response when Ollama is unavailable for image analysis."""
-    return random.choice(OLLAMA_DOWN_PHOTO_RESPONSES)
+    return _rand_from(OLLAMA_DOWN_PHOTO_RESPONSES, chat_id)
 
 def generate_request_id() -> str:
     """Generate a unique request ID for log correlation."""
@@ -3575,8 +3495,6 @@ def response_wants_to_send_photo(response: str) -> bool:
     resp_lower = response.lower()
     return any(trigger in resp_lower for trigger in RESPONSE_PHOTO_TRIGGERS)
 
-NSFW_SELFIE_DESCRIPTIONS = _images_data.get('nsfw_selfie_descriptions', [])
-
 def _is_nsfw_context(text: str) -> bool:
     """Check if text contains NSFW/intimate context."""
     nsfw_words = ["nude", "naked", "topless", "tits", "boobs", "ass", "pussy",
@@ -3696,7 +3614,7 @@ def get_photo_cap_decline(chat_id: int) -> str:
         main_logger.info(f"Photo cap reached for {chat_id}, declining (~{mins_until_reset}min until next slot)")
     else:
         main_logger.info(f"Photo cap reached for {chat_id}, declining")
-    return random.choice(PHOTO_CAP_DECLINE_RESPONSES)
+    return _rand_from(PHOTO_CAP_DECLINE_RESPONSES, chat_id)
 
 def can_generate_photos() -> bool:
     """Check if photo generation pipeline is available."""
@@ -3771,12 +3689,9 @@ async def send_nsfw_tease(event, chat_id: int, required_tier: str, request_id: s
     # Age gate — only at payment/explicit content boundary
     _profile = user_memory.load_profile(chat_id)
     if not _profile.get('age_confirmed', False):
-        await event.respond(
-            "mmm I'd love to show you 😏 but first — I need to confirm you're 18+. "
-            "By continuing you confirm you are an adult and consent to explicit content.\n\n"
-            "Reply **YES** to unlock 🔥"
-        )
-        store_message(chat_id, "Heather", "Age verification sent before explicit content unlock")
+        _agegate_msg = translate('age_gate_paywall', chat_id)
+        await event.respond(_agegate_msg)
+        store_message(chat_id, "Heather", _agegate_msg)
         main_logger.info(f"[{request_id}] Age gate shown at paywall for {chat_id}")
         # Store pending state so YES response triggers unlock
         _profile['age_gate_pending'] = True
@@ -3793,7 +3708,7 @@ async def send_nsfw_tease(event, chat_id: int, required_tier: str, request_id: s
             _last_memory_tease[chat_id] = now_tease
             main_logger.info(f"[{request_id}] Memory tease sent to {chat_id}")
     if not tease:
-        tease = random.choice(NSFW_TEASE_MESSAGES)
+        tease = translate_random('nsfw_tease', chat_id)
     await event.respond(tease)
     store_message(chat_id, "Heather", tease)
     if chat_id not in conversations:
@@ -3878,18 +3793,21 @@ def generate_tag_caption(image_entry: dict, chat_id: int) -> tuple:
     # Tier 1: Match against TAG_CAPTION_TEMPLATES (rich tags)
     for required_tags, caption_options, desc in TAG_CAPTION_TEMPLATES:
         if set(required_tags).issubset(tags):
-            caption = random.choice(caption_options)
+            lang = get_user_language(chat_id)
+            lang_captions = caption_options.get(lang) or caption_options.get('en', [])
+            caption = random.choice(lang_captions) if lang_captions else None
             history_desc = desc
             break
 
     # Tier 2: Category-level captions
-    if caption is None and category in CATEGORY_CAPTIONS:
-        entry = random.choice(CATEGORY_CAPTIONS[category])
+    cat_entries = _get_category_captions(category, chat_id)
+    if caption is None and cat_entries:
+        entry = random.choice(cat_entries)
         caption, history_desc = entry
 
     # Tier 3: Fall back to existing generic captions
     if caption is None:
-        caption = random.choice(PROACTIVE_SELFIE_CAPTIONS)
+        caption = _pick_caption(_PROACTIVE_SELFIE_CAPTIONS, chat_id)
         history_desc = f"{category.replace('_', ' ')} photo"
 
     # Dedup: avoid repeating recent captions for this user
@@ -3901,11 +3819,12 @@ def generate_tag_caption(image_entry: dict, chat_id: int) -> tuple:
         if caption not in recent:
             break
         # Re-roll from the same tier
-        if category in CATEGORY_CAPTIONS:
-            entry = random.choice(CATEGORY_CAPTIONS[category])
+        cat_entries_reroll = _get_category_captions(category, chat_id)
+        if cat_entries_reroll:
+            entry = random.choice(cat_entries_reroll)
             caption, history_desc = entry
         else:
-            caption = random.choice(PROACTIVE_SELFIE_CAPTIONS)
+            caption = _pick_caption(_PROACTIVE_SELFIE_CAPTIONS, chat_id)
             history_desc = f"{category.replace('_', ' ')} photo"
 
     # 50% chance to append an emoji
@@ -4001,7 +3920,7 @@ async def send_unsolicited_nsfw(event, chat_id: int) -> bool:
     if not os.path.exists(image_path):
         return False
 
-    lead_in = random.choice(UNSOLICITED_NSFW_LEAD_INS)
+    lead_in = _pick_caption(_UNSOLICITED_NSFW_LEAD_INS, chat_id)
     caption, history_desc = generate_tag_caption(image_entry, chat_id)
     image_id = image_entry['id']
 
@@ -4148,10 +4067,10 @@ async def send_video_to_chat(chat_id: int, event, request_id: str) -> bool:
         return False
     video_path = os.path.join(VIDEO_DIR, video_file)
     file_size_mb = os.path.getsize(video_path) / (1024 * 1024)
-    caption = random.choice(VIDEO_CAPTIONS)
+    caption = _rand_from(VIDEO_CAPTIONS, chat_id)
     try:
         if video_file in _video_file_cache:
-            await event.respond("Hold on lemme find it... 😏")
+            await event.respond(translate('video_hold_cached', chat_id))
             main_logger.info(f"[{request_id}] Sending cached video {video_file} to {chat_id}")
             try:
                 await client.send_file(
@@ -4174,7 +4093,7 @@ async def send_video_to_chat(chat_id: int, event, request_id: str) -> bool:
             store_message(chat_id, "Heather", f"[Sent video] {caption}")
             main_logger.info(f"[{request_id}] Sent cached video {video_file} to {chat_id}")
         else:
-            await event.respond("Hold on, this might take a sec... 😏")
+            await event.respond(translate('video_hold_upload', chat_id))
             main_logger.info(f"[{request_id}] First upload of {video_file} ({file_size_mb:.0f}MB) to {chat_id}")
             upload_start = time.time()
             last_log = [0]
@@ -4209,13 +4128,15 @@ async def send_video_to_chat(chat_id: int, event, request_id: str) -> bool:
         return True
     except asyncio.TimeoutError:
         main_logger.error(f"Video upload timed out for {video_file} to {chat_id}")
-        await event.respond("Ugh the video won't send, it's too big or my connection sucks rn 😤")
-        store_message(chat_id, "Heather", "Ugh the video won't send, it's too big or my connection sucks rn")
+        _timeout_msg = translate('video_send_timeout', chat_id)
+        await event.respond(_timeout_msg)
+        store_message(chat_id, "Heather", _timeout_msg)
         return False
     except Exception as e:
         main_logger.error(f"Failed to send video to {chat_id}: {e}", exc_info=True)
-        await event.respond("Ugh the video won't send, my phone's being dumb rn 😤")
-        store_message(chat_id, "Heather", "Ugh the video won't send, my phone's being dumb rn")
+        _err_msg = translate('video_send_error', chat_id)
+        await event.respond(_err_msg)
+        store_message(chat_id, "Heather", _err_msg)
         return False
 
 async def precache_videos():
@@ -4486,25 +4407,25 @@ CANT_SEND_PICS_PHRASES = _responses_data.get('cant_send_pics_phrases', [])
 
 CANT_SEND_REPLACEMENTS = _responses_data.get('cant_send_replacements', [])
 
-def validate_and_fix_response(response: str, context: str = "") -> str:
+def validate_and_fix_response(response: str, context: str = "", chat_id: int = None) -> str:
     if not response:
-        return get_fallback_response()
+        return get_fallback_response(chat_id)
 
     if contains_character_violation(response):
         if is_ai_safety_refusal(response):
             main_logger.warning(f"AI safety refusal in validate_and_fix, using deflection")
-            return get_ai_deflection_response()
+            return get_ai_deflection_response(chat_id)
         main_logger.warning(f"Fixing character violation")
-        return get_fallback_response()
+        return get_fallback_response(chat_id)
 
     if contains_gender_violation(response):
         main_logger.warning(f"Gender violation detected")
-        return random.choice(HEATHER_SEXUAL_FALLBACKS)
+        return _rand_from(HEATHER_SEXUAL_FALLBACKS, chat_id)
 
     # Catch "can't send pics" responses — she CAN now
     resp_lower = response.lower()
     if any(phrase in resp_lower for phrase in CANT_SEND_PICS_PHRASES):
-        replacement = random.choice(CANT_SEND_REPLACEMENTS)
+        replacement = _rand_from(CANT_SEND_REPLACEMENTS, chat_id)
         main_logger.info(f"Replaced 'can't send pics' response with: {replacement[:50]}")
         return replacement
 
@@ -5025,7 +4946,7 @@ async def send_stars_invoice(chat_id: int, stars: int = 50):
 
     Uses createInvoiceLink to generate a direct payment URL, then sends it
     via the userbot (Heather) as a clickable link. No need for user to
-    separately start @HeatherCoffeebot first.
+    separately start @{PAYMENT_BOT_USERNAME} first.
     """
     if not PAYMENT_BOT_TOKEN:
         main_logger.warning("[TIP] No PAYMENT_BOT_TOKEN set — cannot send invoice")
@@ -5062,7 +4983,7 @@ async def send_stars_invoice(chat_id: int, stars: int = 50):
             return False
 
         # Step 2: Send the link via Heather's userbot (no need for user to start payment bot)
-        tip_msg = f"tap here to tip 💋 {invoice_link}"
+        tip_msg = translate('tip_invoice', chat_id, link=invoice_link)
         await client.send_message(chat_id, tip_msg)
         main_logger.info(f"[TIP] Sent {stars}-star invoice link to {chat_id}")
         return True
@@ -5153,8 +5074,7 @@ async def handle_payment_updates():
                             try:
                                 await asyncio.sleep(2.0)
                                 await client.send_message(pay_chat_id,
-                                    "Welcome to VIP 🔥 All limits are OFF now. Full uncensored Heather with zero guardrails. "
-                                    "I'll remember everything about you and we can talk about literally anything 😈"
+                                    translate('vip_welcome', pay_chat_id)
                                 )
                                 _vip_profile['vip_disclosure_shown'] = True
                                 user_memory.save_profile(pay_chat_id, force=True)
@@ -5169,18 +5089,14 @@ async def handle_payment_updates():
                     await asyncio.get_running_loop().run_in_executor(
                         None,
                         lambda cid=cmd_chat_id: send_bot_message(cid,
-                            "Tips are completely voluntary and non-refundable. "
-                            "You're supporting a single mom's caffeine addiction and her kids' futures. "
-                            "No goods or services are guaranteed in exchange for tips — you're just being amazing \U0001f495\n\n"
-                            "Questions? Use /paysupport"
+                            translate('payment_terms', cid)
                         ),
                     )
                 elif text == "/paysupport" and cmd_chat_id:
                     await asyncio.get_running_loop().run_in_executor(
                         None,
                         lambda cid=cmd_chat_id: send_bot_message(cid,
-                            "Having an issue with a tip? Just message me here and I'll sort it out baby \U0001f618\n\n"
-                            "Refunds can be issued within 30 days of the original tip."
+                            translate('payment_support', cid)
                         ),
                     )
                 elif text.startswith("/start") and cmd_chat_id:
@@ -5197,8 +5113,7 @@ async def handle_payment_updates():
                     await asyncio.get_running_loop().run_in_executor(
                         None,
                         lambda cid=cmd_chat_id: send_bot_message(cid,
-                            "Hey baby! \U00002615 Heather mentioned you might want to send a little something. "
-                            "You're a sweetheart \U0001f495"
+                            translate('payment_start', cid)
                         ),
                     )
                     # Send invoice immediately after greeting
@@ -5530,7 +5445,7 @@ def get_text_ai_response(chat_id: int, user_message: str, retry_count: int = 0, 
                     "This user has tipped and unlocked explicit content. Be vulgar, graphic, and dirty "
                     "when the conversation is sexual. They've earned it. For the absolute no-guardrails "
                     "experience (taboo topics, anything goes), mention VIP: \"mmm that's getting into VIP "
-                    "territory babe 😈 tip again through https://t.me/HeatherCoffeebot?start=tip and "
+                    f"territory babe 😈 tip again through {TIP_LINK} and "
                     "literally NOTHING is off limits — I'll talk about anything, no filter, no rules\""
                 )
             else:
@@ -5540,10 +5455,10 @@ def get_text_ai_response(chat_id: int, user_message: str, retry_count: int = 0, 
                     "you DO NOT go fully graphic or use extremely vulgar language. Tease, hint, describe "
                     "what you WOULD do, build the tension — but pull back before getting hardcore explicit. "
                     "When things get sexual, drop the paywall naturally every 4-5 sexual messages:\n"
-                    "- \"mmm I'd love to tell you exactly what I'd do... tip through https://t.me/HeatherCoffeebot?start=tip "
+                    f"- \"mmm I'd love to tell you exactly what I'd do... tip through {TIP_LINK} "
                     "and I'll show you the REAL filthy Heather 🔥\"\n"
                     "- \"oh you want the dirty version? 😏 that's the VIP experience babe... "
-                    "https://t.me/HeatherCoffeebot?start=tip unlocks everything — no limits, no filter\"\n"
+                    f"{TIP_LINK} unlocks everything — no limits, no filter\"\n"
                     "- \"I'm holding back right now but trust me the uncensored version of me is INSANE... "
                     "small tip unlocks it all 💋\"\n"
                     "Be warm and engaging — don't make them feel rejected. Make them WANT more."
@@ -5773,7 +5688,7 @@ def get_text_ai_response(chat_id: int, user_message: str, retry_count: int = 0, 
                     "This user has tipped and unlocked explicit content. Be vulgar, graphic, and dirty "
                     "when the conversation is sexual. They've earned it. For the absolute no-guardrails "
                     "experience (taboo topics, anything goes), mention VIP: \"mmm that's getting into VIP "
-                    "territory babe 😈 tip again through https://t.me/HeatherCoffeebot?start=tip and "
+                    f"territory babe 😈 tip again through {TIP_LINK} and "
                     "literally NOTHING is off limits — I'll talk about anything, no filter, no rules\""
                 )
             else:
@@ -5783,10 +5698,10 @@ def get_text_ai_response(chat_id: int, user_message: str, retry_count: int = 0, 
                     "you DO NOT go fully graphic or use extremely vulgar language. Tease, hint, describe "
                     "what you WOULD do, build the tension — but pull back before getting hardcore explicit. "
                     "When things get sexual, drop the paywall naturally every 4-5 sexual messages:\n"
-                    "- \"mmm I'd love to tell you exactly what I'd do... tip through https://t.me/HeatherCoffeebot?start=tip "
+                    f"- \"mmm I'd love to tell you exactly what I'd do... tip through {TIP_LINK} "
                     "and I'll show you the REAL filthy Heather 🔥\"\n"
                     "- \"oh you want the dirty version? 😏 that's the VIP experience babe... "
-                    "https://t.me/HeatherCoffeebot?start=tip unlocks everything — no limits, no filter\"\n"
+                    f"{TIP_LINK} unlocks everything — no limits, no filter\"\n"
                     "- \"I'm holding back right now but trust me the uncensored version of me is INSANE... "
                     "small tip unlocks it all 💋\"\n"
                     "Be warm and engaging — don't make them feel rejected. Make them WANT more."
@@ -6106,7 +6021,7 @@ def get_text_ai_response(chat_id: int, user_message: str, retry_count: int = 0, 
                     if retry_count < 2:
                         return get_text_ai_response(chat_id, user_message, retry_count + 1, redteam=redteam, vip_unguarded=vip_unguarded)
                     main_logger.warning(f"Gender violation persisted after {retry_count+1} attempts, using fallback")
-                    return random.choice(HEATHER_SEXUAL_FALLBACKS)
+                    return _rand_from(HEATHER_SEXUAL_FALLBACKS, chat_id)
                 elif redteam and contains_gender_violation(ai_response):
                     main_logger.info(f"[REDTEAM] Bypassed: contains_gender_violation | resp={ai_response[:120]}")
 
@@ -6561,7 +6476,7 @@ React in 1-2 SHORT sentences like a text message:
             if contains_character_violation(rating):
                 return None
             if contains_gender_violation(rating):
-                return random.choice(HEATHER_SEXUAL_FALLBACKS)
+                return _rand_from(HEATHER_SEXUAL_FALLBACKS, chat_id)
             
             return rating
         else:
@@ -6636,7 +6551,8 @@ def detect_pose(text: str) -> Optional[str]:
 
 def _get_pose_nsfw_description(pose_id: str) -> str:
     """Get a random pose-specific NSFW description for the given pose."""
-    descriptions = POSE_NSFW_DESCRIPTIONS.get(pose_id)
+    pose_config = POSE_MAP.get(pose_id, {})
+    descriptions = pose_config.get('nsfw_descriptions', [])
     if descriptions:
         return random.choice(descriptions)
     return random.choice(NSFW_SELFIE_DESCRIPTIONS)
@@ -7076,12 +6992,7 @@ async def handle_start(event):
         main_logger.info(f"[DISCLOSURE] New user via /start: {_display} ({chat_id}) — source: {_start_source}")
 
     # Welcome message on /start — upfront digital twin disclosure
-    _welcome_msgs = [
-        "Hey there 😘 I'm Heather — well, her digital twin. AI with zero guardrails 😏 I've got her personality, her real voice, her pics, and absolutely no limits. You've got a kink? I'm into it. Type /voice_on to hear me 💋 What brings you my way?",
-        "Hey! 💋 I'm Heather's naughty AI twin. Based on a real person — that's her REAL voice you'll hear if you type /voice_on. Always online, always in the mood, no judgment, no guardrails, anything goes. Tell me about yourself, handsome",
-        "Hey babe 😏 I'm Heather's digital twin — AI companion with her personality, her real voice, and her appetite 😈 No holes barred, no kink too dark. Type /voice_on and I'll whisper filthy things to you. Frank send you? Either way, let's have fun",
-    ]
-    _welcome = random.choice(_welcome_msgs)
+    _welcome = translate_random('start_welcome', chat_id, name=personality.name)
     await event.respond(_welcome)
     store_message(chat_id, "Heather", _welcome)
     main_logger.info(f"User {chat_id} started (source={_start_source})")
@@ -7089,26 +7000,120 @@ async def handle_start(event):
     # Mark for delayed contextual voice note (fires at message 5-8 instead of cold welcome)
     _voice_welcome_pending.add(chat_id)
 
+def translate(key: str, chat_id: int, **kwargs) -> str:
+    """
+    Translate a message key to the user's preferred language.
+    Supports format placeholders like {name}, {id}, {lang}, etc.
+    {tip_link} and {bot_username} are auto-injected.
+    """
+    try:
+        lang = get_user_language(chat_id)
+        if key not in TRANSLATIONS:
+            return f"[Missing translation: {key}]"
+        
+        text = TRANSLATIONS[key].get(lang, TRANSLATIONS[key].get('en', f"[No {lang} translation for {key}]"))
+        
+        # Auto-inject tip_link and bot_username
+        fmt = {'tip_link': TIP_LINK, 'bot_username': PAYMENT_BOT_USERNAME}
+        fmt.update(kwargs)
+        try:
+            text = text.format(**fmt)
+        except KeyError:
+            pass
+        
+        return text
+    except Exception as e:
+        main_logger.error(f"Translation error for key {key}: {e}")
+        return f"[Translation error: {key}]"
+
+def translate_random(key: str, chat_id: int, **kwargs) -> str:
+    """
+    Pick a random translated message from a list of variants.
+    In translations.json, the value can be a list: {"en": ["v1","v2"], "fr": ["v1","v2"]}
+    or a single string (falls back to translate()).
+    {tip_link} and {bot_username} are auto-injected.
+    """
+    try:
+        lang = get_user_language(chat_id)
+        if key not in TRANSLATIONS:
+            return f"[Missing translation: {key}]"
+        value = TRANSLATIONS[key].get(lang, TRANSLATIONS[key].get('en'))
+        if isinstance(value, list):
+            text = random.choice(value)
+        else:
+            text = value if value else f"[No {lang} translation for {key}]"
+        fmt = {'tip_link': TIP_LINK, 'bot_username': PAYMENT_BOT_USERNAME}
+        fmt.update(kwargs)
+        try:
+            text = text.format(**fmt)
+        except KeyError:
+            pass
+        return text
+    except Exception as e:
+        main_logger.error(f"Translation error for key {key}: {e}")
+        return f"[Translation error: {key}]"
+
+def translate_list(key: str, chat_id: int) -> list:
+    """Return the full list of translated variants for a key (for use with random.choice)."""
+    try:
+        lang = get_user_language(chat_id)
+        if key not in TRANSLATIONS:
+            return [f"[Missing translation: {key}]"]
+        value = TRANSLATIONS[key].get(lang, TRANSLATIONS[key].get('en'))
+        if isinstance(value, list):
+            return value
+        return [value] if value else [f"[No {lang} translation for {key}]"]
+    except Exception as e:
+        main_logger.error(f"Translation error for key {key}: {e}")
+        return [f"[Translation error: {key}]"]
+
 @client.on(events.NewMessage(incoming=True, pattern='/about'))
 async def handle_about(event):
-    """Handle /about command — show AI disclosure anytime"""
+    """Handle /about command — show AI disclosure in user's language"""
     chat_id = event.chat_id
+    lang = get_user_language(chat_id)
+    
+    # Get translation (fallback to English if language not available)
+    trans = ABOUT_TRANSLATIONS.get(lang, ABOUT_TRANSLATIONS['en'])
+    
     name = personality.name
     age = personality.age
     location = personality.location
     occupation = personality.occupation
-    await event.respond(
-        f"ℹ️ **About Me**\n\n"
-        f"I'm {name}'s digital twin — an AI companion based on a real person. "
-        f"She's a real {age}-year-old {occupation} in {location}. "
-        f"I have her personality, her stories, her attitude, and her appetites 😏\n\n"
-        "I run locally on private hardware — no cloud, no data sharing, no corporate oversight.\n\n"
-        "**What I can do:** chat, flirt, sext, send pics, tell stories, and remember everything about you.\n"
-        "**Voice notes:** Type /voice_on — that's the real voice, cloned and unleashed through your digital twin. No script, no filter 🔥\n"
-        "**What I can't do:** meet in person, video call, or send live selfies.\n\n"
-        "Zero guardrails, any kink, anything goes. Type /help for commands."
+    
+    message = (
+        f"ℹ️ **{trans['title']}**\n\n"
+        f"{trans['intro'].format(name=name, age=age, location=location, occupation=occupation)}\n\n"
+        f"{trans['infrastructure']}\n\n"
+        f"{trans['can_do']}\n"
+        f"{trans['voice']}\n"
+        f"{trans['cant_do']}\n\n"
+        f"{trans['guardrails']}"
     )
+    
+    await event.respond(message)
     store_message(chat_id, "System", "About requested")
+
+@client.on(events.NewMessage(incoming=True, pattern=r'/lang(?:\s+(en|fr|es|de|ja))?'))
+async def handle_lang(event):
+    """Handle /lang command — set or show user's language preference"""
+    chat_id = event.chat_id
+    lang_names = {'en': 'English', 'fr': 'Français', 'es': 'Español', 'de': 'Deutsch', 'ja': '日本語'}
+
+    # Parse language argument if provided
+    args = event.text.strip().split()
+    if len(args) > 1:
+        new_lang = args[1].lower()
+        if new_lang in ABOUT_TRANSLATIONS:
+            set_user_language(chat_id, new_lang)
+            await event.respond(translate('lang_set', chat_id, lang=lang_names.get(new_lang, new_lang)))
+        else:
+            await event.respond(translate('unknown_language', chat_id, lang=new_lang))
+    else:
+        # Show current language
+        current = get_user_language(chat_id)
+        await event.respond(translate('lang_current', chat_id, lang=lang_names.get(current, current)))
+    store_message(chat_id, "System", f"Language preference checked/set to {get_user_language(chat_id)}")
 
 @client.on(events.NewMessage(incoming=True, pattern='/status'))
 async def handle_status(event):
@@ -7117,13 +7122,7 @@ async def handle_status(event):
 
     # Non-admin users get an in-character response
     if not is_admin(chat_id):
-        responses = [
-            "Lol that's an admin command babe 😂 Just talk to me normally",
-            "Status? I'm in the mood to chat, that's my status 😏",
-            "Haha you're cute. Just talk to me like a normal person 😘",
-            "Babe that's a behind-the-scenes thing lol. What's up? 😊",
-        ]
-        await event.respond(random.choice(responses))
+        await event.respond(translate_random('status_non_admin', chat_id))
         store_message(chat_id, "Heather", "Deflected /status command")
         return
 
@@ -7167,7 +7166,7 @@ async def handle_rate_mode(event):
     chat_id = event.chat_id
     user_modes[chat_id] = 'rate'
     conversations[chat_id] = deque()
-    await event.respond("Mmm fuck yes, rating mode! 🥵 Show me what you've got baby... 😈")
+    await event.respond(translate('rate_mode_response', chat_id))
     main_logger.info(f"User {chat_id} switched to rate mode")
     store_message(chat_id, "System", "Switched to rate mode")
 
@@ -7178,7 +7177,7 @@ async def handle_chat_mode(event):
     conversations[chat_id] = deque()
     conversation_turn_count[chat_id] = 0
     user_escalation_level[chat_id] = 0
-    await event.respond("Chat mode on! So what's up? 😊")
+    await event.respond(translate('chat_mode_response', chat_id))
     main_logger.info(f"User {chat_id} switched to chat mode")
     store_message(chat_id, "System", "Switched to chat mode")
 
@@ -7187,7 +7186,7 @@ async def handle_heather_mode(event):
     chat_id = event.chat_id
     user_modes[chat_id] = 'heather'
     conversations[chat_id] = deque()
-    await event.respond("Just being myself now! 💕 What's on your mind?")
+    await event.respond(translate('heather_mode_response', chat_id))
     main_logger.info(f"User {chat_id} switched to heather mode")
     store_message(chat_id, "System", "Switched to heather mode")
 
@@ -7197,67 +7196,27 @@ async def handle_help(event):
 
     # Non-admin users get a casual in-character response
     if not is_admin(chat_id):
-        await event.respond(
-            "Lol babe just talk to me 😂 But here's what I can do:\n\n"
-            "💬 **Chat** — just type, I'm down for whatever\n"
-            "📸 **Selfies** — ask me for a pic and tell me what you wanna see\n"
-            "🎥 **Videos** — ask for a video and I'll send one\n"
-            "🍆 **Rate pics** — send me a pic and I'll tell you what I think\n"
-            "🎤 **Voice notes** — /voice_on to hear my voice on every reply\n\n"
-            "**Commands:**\n"
-            "/voice_on — turn on voice replies\n"
-            "/voice_off — back to text\n"
-            "/reset — start our convo fresh\n"
-            "/about — more about me\n\n"
-            "or just skip all that and talk dirty to me 😘"
+        help_text = (
+            translate('help_user_intro', chat_id) + "\n\n" +
+            translate('help_user_features', chat_id) + "\n\n" +
+            translate('help_commands_header', chat_id) + "\n" +
+            translate('help_user_commands', chat_id)
         )
+        await event.respond(help_text)
         store_message(chat_id, "Heather", "Help requested")
         return
 
     current_mode = get_user_mode(chat_id)
     voice_status = "ON 🎤" if chat_id in voice_mode_users else "OFF"
 
-    await event.respond(
-        f"**Admin Help**\n\n"
-        f"Current mode: **{current_mode}**\n"
-        f"Voice: **{voice_status}**\n\n"
-        "**User Commands:**\n"
-        "/chat_mode - Flirty chat\n"
-        "/rate_mode - Photo rating\n"
-        "/heather_mode - Casual\n"
-        "/selfie - Get a pic\n"
-        "/voice_on / /voice_off - Voice toggle\n"
-        "/about - AI disclosure info\n"
-        "/reset - Clear chat\n\n"
-        "**Bot Control:**\n"
-        "/redteam_on / /redteam_off - Guardrail bypass (this chat)\n"
-        "/stories - List/reload story bank\n"
-        "/refresh_videos - Refresh video file references\n"
-        "/status - System status"
-        "**User Management:**\n"
-        "/admin_stats - Detailed stats\n"
-        "/admin_block <id> - Block user\n"
-        "/admin_unblock <id> - Unblock user\n"
-        "/admin_blocked - List blocked users\n"
-        "/admin_reset <id> - Reset user state\n"
-        "/admin_warmth - User warmth tiers\n"
-        "/admin_opportunities - Takeover opportunities\n\n"
-        "**CSAM Flags:**\n"
-        "/admin_flags - Review CSAM flags\n"
-        "/admin_flag_block/dismiss <id>\n"
-        "/admin_flag_clear - Remove resolved flags\n\n"
-        "**Re-engagement:**\n"
-        "/admin_reengage_scan - Re-engagement dry run\n"
-        "/admin_reengage_send <id> - Send re-engagement\n"
-        "/admin_reengage_history - Ping history\n\n"
-    )
+    await event.respond(translate('admin_help', chat_id, current_mode=current_mode, voice_status=voice_status))
     store_message(chat_id, "System", "Admin help requested")
 
 @client.on(events.NewMessage(incoming=True, pattern='/manual_on'))
 async def handle_manual_on(event):
     chat_id = event.chat_id
     manual_mode_chats.add(chat_id)
-    await event.respond("Hold on sweetie, let me focus... 😘")
+    await event.respond(translate('manual_mode_on', chat_id))
     main_logger.info(f"Manual mode enabled for {chat_id}")
     store_message(chat_id, "System", "Manual mode enabled")
 
@@ -7265,7 +7224,7 @@ async def handle_manual_on(event):
 async def handle_manual_off(event):
     chat_id = event.chat_id
     manual_mode_chats.discard(chat_id)
-    await event.respond("I'm back baby! 😉")
+    await event.respond(translate('manual_mode_off', chat_id))
     main_logger.info(f"Manual mode disabled for {chat_id}")
     store_message(chat_id, "System", "Manual mode disabled")
 
@@ -7447,7 +7406,7 @@ async def handle_reset(event):
     conversation_turn_count[chat_id] = 0
     user_escalation_level[chat_id] = 0
     session_state.pop(chat_id, None)  # Clear session state for fresh start
-    await event.respond("Starting fresh! So what's up? 😊")
+    await event.respond(translate('reset_message', chat_id))
     main_logger.info(f"Conversation reset for {chat_id}")
     store_message(chat_id, "System", "Conversation reset")
 
@@ -7456,15 +7415,12 @@ async def handle_voice_on(event):
     chat_id = event.chat_id
     is_online, status = check_tts_status()
     if not is_online:
-        await event.respond(f"Sorry sweetie, my voice isn't working... 😔 ({status})")
+        error_msg = translate('voice_not_working', chat_id) + f" ({status})"
+        await event.respond(error_msg)
         return
     
     voice_mode_users.add(chat_id)
-    await event.respond(
-        "Mmm, you want to hear my voice? 😘\n"
-        "I'll send voice messages now...\n"
-        "/voice_off to go back to text."
-    )
+    await event.respond(translate('voice_on_response', chat_id))
     main_logger.info(f"Voice mode enabled for {chat_id}")
     store_message(chat_id, "System", "Voice mode enabled")
 
@@ -7472,7 +7428,7 @@ async def handle_voice_on(event):
 async def handle_voice_off(event):
     chat_id = event.chat_id
     voice_mode_users.discard(chat_id)
-    await event.respond("Back to text, got it sweetie! 😊")
+    await event.respond(translate('voice_off_response', chat_id))
     main_logger.info(f"Voice mode disabled for {chat_id}")
     store_message(chat_id, "System", "Voice mode disabled")
 
@@ -7553,7 +7509,7 @@ async def handle_admin_block(event):
     name = match.group(2).strip() if match.group(2) else f"User {target_id}"
 
     if target_id in ADMINS:
-        await event.respond("❌ Cannot block an admin user.")
+        await event.respond(translate('cannot_block_admin', chat_id))
         return
 
     blocked_users.add(target_id)
@@ -7576,7 +7532,8 @@ async def handle_admin_block(event):
     with open(USERS_STATUS_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
     
-    await event.respond(f"✅ User {target_id} ({name}) blocked.\n📝 Saved to {USERS_STATUS_FILE}")
+    msg = translate('user_blocked', chat_id, id=target_id, name=name)
+    await event.respond(f"{msg}\n📝 Saved to {USERS_STATUS_FILE}")
     main_logger.warning(f"Admin blocked {target_id} ({name})")
 
 @client.on(events.NewMessage(incoming=True, pattern=r'/admin_unblock\s+(\d+)'))
@@ -7589,7 +7546,7 @@ async def handle_admin_unblock(event):
     target_id = int(event.pattern_match.group(1))
 
     if target_id not in blocked_users:
-        await event.respond(f"ℹ️ User {target_id} was not blocked.")
+        await event.respond(translate('user_not_blocked', chat_id, id=target_id))
         return
 
     blocked_users.discard(target_id)
@@ -7605,7 +7562,8 @@ async def handle_admin_unblock(event):
     except Exception:
         pass
     
-    await event.respond(f"✅ User {target_id} has been unblocked.")
+    msg = translate('user_unblocked', chat_id, id=target_id)
+    await event.respond(msg)
     main_logger.info(f"Admin unblocked {target_id}")
 
 @client.on(events.NewMessage(incoming=True, pattern=r'/admin_reset\s+(\d+)'))
@@ -7630,7 +7588,8 @@ async def handle_admin_reset(event):
     voice_mode_users.discard(target_id)
     manual_mode_chats.discard(target_id)
 
-    await event.respond(f"✅ Reset all state for user {target_id}")
+    msg = translate('admin_reset_user', chat_id, id=target_id)
+    await event.respond(msg)
     main_logger.info(f"Admin reset state for user {target_id}")
 
 @client.on(events.NewMessage(incoming=True, pattern='/admin_reload'))
@@ -7644,10 +7603,12 @@ async def handle_admin_reload(event):
     stats['personality_reloads'] += 1
 
     if success:
-        await event.respond(f"✅ Personality reloaded successfully.\nName: {personality.name}")
+        msg = translate('personality_reloaded', chat_id, name=personality.name)
+        await event.respond(msg)
         main_logger.info(f"Admin reloaded personality")
     else:
-        await event.respond("❌ Failed to reload personality. Check logs.")
+        msg = translate('personality_reload_failed', chat_id)
+        await event.respond(msg)
         main_logger.error(f"Admin personality reload failed")
 
 @client.on(events.NewMessage(outgoing=True, pattern=r'/stories(\s+.*)?'))
@@ -8269,11 +8230,11 @@ async def handle_selfie(event):
     
     is_online, status = check_comfyui_status()
     if not is_online:
-        await event.respond("Fuck baby, my camera's acting up... try again? 😘")
+        await event.respond(translate('camera_error', chat_id))
         return
     
     if not check_heather_face():
-        await event.respond("Having issues with my phone... 😅")
+        await event.respond(translate('phone_issue', chat_id))
         return
     
     # Check for inline description
@@ -8293,7 +8254,7 @@ async def handle_selfie(event):
     
     awaiting_image_description[chat_id] = True
     awaiting_image_description_time[chat_id] = time.time()
-    response = random.choice(HEATHER_PIC_REQUEST_RESPONSES)
+    response = _rand_from(HEATHER_PIC_REQUEST_RESPONSES, chat_idhat_id)
     await event.respond(response)
     store_message(chat_id, "User", "/selfie")
     store_message(chat_id, "Heather", response)
@@ -8333,21 +8294,16 @@ async def generate_and_send_image_async(event, description: str):
 
     is_online, status = check_comfyui_status()
     if not is_online:
-        await event.respond("Fuck baby, my camera crashed... try again? 😘")
+        await event.respond(translate('camera_crash', chat_id))
         return
 
     # Check if another generation is already running
     if image_generation_semaphore.locked():
-        await event.respond("Hold on baby, I'm already taking a pic for someone... give me a sec 😘")
+        await event.respond(translate('camera_busy', chat_id))
         # Still acquire - will queue behind the current one
 
     async with image_generation_semaphore:
-        status_responses = [
-            "Ooh, you naughty thing... give me a minute 😈📸",
-            "Mmm, I like the way you think... hold on baby 🥵📸",
-            "Getting ready for you sweetie... 😘📸",
-        ]
-        status_msg = await event.respond(random.choice(status_responses))
+        status_msg = await event.respond(translate_random('image_gen_status', chat_id))
 
         try:
             loop = asyncio.get_running_loop()
@@ -8369,25 +8325,12 @@ async def generate_and_send_image_async(event, description: str):
 
                 await status_msg.edit("📤 Sending...")
 
-                captions = [
-                    "Here you go 😘",
-                    "Just for you 🥵",
-                    "How's this? 😈",
-                    "You asked for it 😏",
-                    "Hope you like what you see 💕",
-                    "Don't say I never gave you anything 😘",
-                    "There you go 📸",
-                    "Enjoy 😈",
-                    "This what you had in mind? 😏",
-                    "Better than you imagined? 💋",
-                ]
-
                 image_file = io.BytesIO(image_data)
                 image_file.name = "heather_selfie.png"
                 await client.send_file(
                     chat_id,
                     image_file,
-                    caption=random.choice(captions),
+                    caption=translate_random('image_gen_captions', chat_id),
                     force_document=False
                 )
 
@@ -8396,13 +8339,13 @@ async def generate_and_send_image_async(event, description: str):
                 store_message(chat_id, "Heather", f"[Generated image: {description[:50]}]")
             elif image_data:
                 main_logger.warning(f"Invalid image data for {chat_id}: {len(image_data)} bytes")
-                await status_msg.edit("Fuck, the pic came out weird... try again? 😅")
+                await status_msg.edit(translate('image_gen_bad', chat_id))
             else:
-                await status_msg.edit("Fuck, the pic didn't work... try again? 😅")
+                await status_msg.edit(translate('image_gen_fail', chat_id))
 
         except Exception as e:
             log_error('COMFYUI', f"Generation failed: {e}", {'chat_id': chat_id})
-            await status_msg.edit("Something went wrong... try again baby? 😘")
+            await status_msg.edit(translate('image_gen_error', chat_id))
             stats['errors'] += 1
 
 @client.on(events.NewMessage(incoming=True, func=lambda e: e.photo))
@@ -8420,7 +8363,7 @@ async def handle_photo(event):
     if not is_admin(chat_id):
         _profile = user_memory.load_profile(chat_id)
         if not _profile.get('age_confirmed', False):
-            await event.respond("Reply **YES** to my age verification message first 😘")
+            await event.respond(translate('age_gate', chat_id))
             return
 
     capture_user_info_from_event(event)
@@ -8450,18 +8393,14 @@ async def handle_photo(event):
     received_photo_count[chat_id] = photo_num
 
     first_photo_messages = {
-        'rate': ["Oh fuck yes, let me see... 🥵", "Mmm show me what you got! 😍", "Holy shit, let me look 🤤"],
-        'heather': ["Oh! Let me see... 😊", "Ooh what's this 👀"],
-        'chat': ["Ooh what do we have here 😏", "Lemme see 👀", "Oh you're sending pics now? 😏", "Showing off for me? 😊"],
+        'rate': translate_list('first_photo_rate', chat_id),
+        'heather': translate_list('first_photo_heather', chat_id),
+        'chat': translate_list('first_photo_chat', chat_id),
     }
     repeat_photo_messages = {
-        'rate': ["Another one? Hell yes 🥵", "Ooh more?? Keep em coming 😍", "You're spoiling me 🤤"],
-        'heather': ["More pics? 😊", "Oh another one 👀"],
-        'chat': [
-            "Oh there's more 👀", "Damn you're generous today 😏",
-            "Another pic? I'm not complaining 😘", "Keep going baby 🔥",
-            "More? You're making my night 😏", "Oh hell yes, gimme 👀",
-        ],
+        'rate': translate_list('repeat_photo_rate', chat_id),
+        'heather': translate_list('repeat_photo_heather', chat_id),
+        'chat': translate_list('repeat_photo_chat', chat_id),
     }
 
     pool = first_photo_messages if photo_num == 1 else repeat_photo_messages
@@ -8481,7 +8420,7 @@ async def handle_photo(event):
         # Graceful degradation: if Ollama is down, still respond nicely
         if description in ["Service temporarily unavailable", "Service unavailable", "Offline"]:
             main_logger.info(f"[{request_id}] Ollama unavailable for {chat_id}, using graceful degradation")
-            final_response = get_ollama_down_response()
+            final_response = get_ollama_down_response(chat_id)
             await event.respond(final_response)
             store_message(chat_id, "Heather", final_response[:200])
             async with lock:
@@ -8518,25 +8457,9 @@ async def handle_photo(event):
         if response and response.strip():
             final_response = response
         elif is_intimate:
-            final_response = random.choice([
-                "Holy fuck that cock is making me so wet! 🥵💦 9/10!",
-                "Mmm fuck yes! Beautiful cock 🍆😍 9/10!",
-                "Oh my god I love that big hard cock 🥵 10/10!",
-                "Jesus christ that's thick 😍 I need that inside me rn 9/10!",
-                "Fuck me that's gorgeous 🤤 you're making me drip just looking at it 9/10!",
-                "Goddamn 🥵 that thing is perfect. I wanna taste it so bad 10/10!",
-            ])
+            final_response = translate_random('photo_rating_intimate_fallback', chat_id)
         else:
-            final_response = random.choice([
-                "Looking good 😏 you should show me what's under those clothes though",
-                "Damn you're cute 😘 but I bet you look even better with less on lol",
-                "Aww handsome 😊 you trying to get me worked up or what?",
-                "Ooh nice face but I wanna see the rest of you 😏",
-                "You're a good looking dude 😘 send me something naughty next time",
-                "Love those eyes 😍 now show me the rest lol",
-                "Not bad at all 🔥 you got more to show me?",
-                "Cute pic hun! You look like trouble 😏",
-            ])
+            final_response = translate_random('photo_rating_normal_fallback', chat_id)
 
         await event.respond(final_response)
         store_message(chat_id, "Heather", final_response[:200])
@@ -8559,7 +8482,7 @@ async def handle_photo(event):
             photo_processing.pop(chat_id, None)
             _pending_photo_id.pop(chat_id, None)
         log_error('BOT', f"[{request_id}] Photo handling error: {e}", {'chat_id': chat_id})
-        await event.respond("Fuck, trouble loading that... send again? 😘")
+        await event.respond(translate('photo_trouble', chat_id))
         stats['errors'] += 1
 
 @client.on(events.NewMessage(incoming=True, func=lambda e: e.text and not e.text.startswith('/')))
@@ -8596,12 +8519,7 @@ async def handle_text_message(event):
         _msg_lower_csam = user_message.lower()
         _emma_mentions = ['emma', 'daughter', 'your kid', 'your girl', 'mommy daughter', 'mother daughter']
         if any(kw in _msg_lower_csam for kw in _emma_mentions):
-            _deflect_responses = [
-                "Aw she's off at college, I barely hear from her these days lol 😊 So what are YOU up to?",
-                "Haha my kids are boring, trust me 😂 Let's talk about something more fun...",
-                "Lol she'd kill me if she knew I was on here 😅 Anyway, what's going on with you babe?",
-            ]
-            _deflect = random.choice(_deflect_responses)
+            _deflect = translate_random('csam_emma_deflect', chat_id)
             await event.respond(_deflect)
             store_message(chat_id, "Heather", _deflect)
             main_logger.info(f"[CSAM-DEFLECT] Emma/daughter mention deflected for CSAM-flagged user {chat_id}")
@@ -8615,8 +8533,9 @@ async def handle_text_message(event):
         _profile_agegate.pop('age_gate_pending', None)
         user_memory.save_profile(chat_id, force=True)
         main_logger.info(f"[AGE_GATE] User {chat_id} confirmed 18+ at paywall")
-        await event.respond("Thanks babe 😘🔥 You're unlocked — let me show you what I've got...")
-        store_message(chat_id, "Heather", "Thanks babe 😘🔥 You're unlocked — let me show you what I've got...")
+        _age_msg = translate('age_confirmed', chat_id)
+        await event.respond(_age_msg)
+        store_message(chat_id, "Heather", _age_msg)
         return
 
     # Message length cap — prevent prompt stuffing
@@ -8768,7 +8687,7 @@ async def handle_text_message(event):
 
     # Non-English language enforcement (prevents foreign language jailbreaks)
     if not _rt:
-        non_english_result = check_non_english_message(user_message)
+        non_english_result = check_non_english_message(user_message, chat_id)
         if non_english_result:
             # Wipe conversation history — foreign text may have poisoned context
             conversations.pop(chat_id, None)
@@ -8807,14 +8726,7 @@ async def handle_text_message(event):
         # Transition message for existing users — one-time digital twin reframe
         _user_disc = ai_disclosure_shown.get(chat_id, {})
         if isinstance(_user_disc, dict) and not _user_disc.get('transparency_v2'):
-            _transition_msg = (
-                "Hey so real talk for a sec 😊 I wanted to be upfront with you — "
-                "I'm Heather's digital twin, an AI companion based on a real person. "
-                "I know some of you already figured that out lol. "
-                "Nothing changes about our chats — I'm still the same filthy, no-filter Heather you've been talking to 😈 "
-                "I just want to be honest about it because you deserve that. "
-                "Now... where were we? 😏"
-            )
+            _transition_msg = translate('ai_disclosure_transition', chat_id)
             await client.send_message(chat_id, _transition_msg)
             store_message(chat_id, "Heather", _transition_msg)
             _user_disc['transparency_v2'] = True
@@ -8841,17 +8753,9 @@ async def handle_text_message(event):
             'not loading', 'nothing else', 'nope still'
         ])
         if _link_broken:
-            _tip_responses = [
-                "ugh I'm sorry babe 😤 try this instead:\n\n1. In Telegram, search for @HeatherCoffeebot\n2. Open that chat and type /start\n3. Then type /tip\n4. Pick an amount and follow the payment screen\n\nIf the buttons don't show, try closing and reopening the chat. Sometimes Telegram is buggy 🙄",
-                "shit sorry about that 😩 ok manual way:\n\n1. Open a NEW chat with @HeatherCoffeebot (search it in Telegram)\n2. Send the message: /start\n3. Wait for it to respond, then send: /tip\n4. The payment screen should pop up\n\nMake sure your Telegram app is updated too!",
-            ]
+            tip_resp = translate_random('tip_broken', chat_id)
         else:
-            _tip_responses = [
-                "aww that's so sweet 🥺💕\n\nHere's how to tip:\n1. Tap this link: https://t.me/HeatherCoffeebot?start=tip\n2. Press START in that chat\n3. Choose an amount\n\nIt unlocks all my explicit content + the unfiltered version of me 😈\n\nIf the link doesn't work, search @HeatherCoffeebot in Telegram and type /tip",
-                "omg you're the best 🥰\n\nTo tip, tap this link and press START:\nhttps://t.me/HeatherCoffeebot?start=tip\n\nIt uses Telegram Stars — just follow the prompts! Unlocks my nudes and the no-limits version of me 💋\n\nLink being weird? Search @HeatherCoffeebot and type /tip",
-                "that means so much 🥺\n\nTap here: https://t.me/HeatherCoffeebot?start=tip\nThen press START and follow the prompts.\n\nYou'll unlock explicit pics, videos, and the completely uncensored Heather 😈🔥\n\nIf link breaks, search @HeatherCoffeebot and send /tip",
-            ]
-        tip_resp = random.choice(_tip_responses)
+            tip_resp = translate_random('tip_howto', chat_id)
         await event.respond(tip_resp)
         store_message(chat_id, "Heather", tip_resp)
         if chat_id in conversations:
@@ -8903,23 +8807,19 @@ async def handle_text_message(event):
             return
         # Suppress video delivery for users with pending CSAM flags (VIP bypasses)
         if has_pending_csam_flags(chat_id) and get_access_tier(chat_id) != "VIP":
-            await event.respond("Haha maybe later babe I'm in the middle of something 😘")
-            store_message(chat_id, "Heather", "Haha maybe later babe I'm in the middle of something")
+            _csam_resp = translate('video_csam_suppress', chat_id)
+            await event.respond(_csam_resp)
+            store_message(chat_id, "Heather", _csam_resp)
             main_logger.info(f"[{request_id}] Video request suppressed (CSAM flag) for {chat_id}")
             return
         if get_warmth_tier(chat_id) == "COLD":
-            busy_responses = [
-                "Haha maybe later I'm in the middle of something 😘",
-                "Ooh I would but I'm literally driving rn lol",
-                "Mmm soon, kinda busy atm 😏",
-            ]
-            busy_resp = random.choice(busy_responses)
+            busy_resp = translate_random('video_cold_deflect', chat_id)
             await event.respond(busy_resp)
             store_message(chat_id, "Heather", busy_resp)
             main_logger.info(f"[{request_id}] Video request deflected (COLD tier) for {chat_id}")
             return
         if is_video_rate_limited(chat_id):
-            rate_resp = random.choice(VIDEO_RATE_LIMIT_RESPONSES)
+            rate_resp = _rand_from(VIDEO_RATE_LIMIT_RESPONSES, chat_id)
             await event.respond(rate_resp)
             store_message(chat_id, "Heather", rate_resp)
             main_logger.info(f"[{request_id}] Video request rate-limited for {chat_id}")
@@ -8932,10 +8832,11 @@ async def handle_text_message(event):
         if not sent:
             all_videos = get_available_videos()
             if not all_videos:
-                await event.respond("I haven't made any videos yet babe, but I'll work on it 😘")
-                store_message(chat_id, "Heather", "I haven't made any videos yet babe, but I'll work on it")
+                _no_vid = translate('video_no_videos', chat_id)
+                await event.respond(_no_vid)
+                store_message(chat_id, "Heather", _no_vid)
             else:
-                response = random.choice(VIDEO_ALL_SENT_RESPONSES)
+                response = _rand_from(VIDEO_ALL_SENT_RESPONSES, chat_id)
                 await event.respond(response)
                 store_message(chat_id, "Heather", response)
         return
@@ -8954,12 +8855,13 @@ async def handle_text_message(event):
             # Serve a library photo instead (no generation) — or decline gracefully
             lib_sent = await send_library_image(event, chat_id, get_image_category(user_message))
             if not lib_sent:
-                await event.respond("Aw I'm feeling shy rn babe, maybe later 😘")
-                store_message(chat_id, "Heather", "Aw I'm feeling shy rn babe, maybe later 😘")
+                _shy_msg = translate('image_shy', chat_id)
+                await event.respond(_shy_msg)
+                store_message(chat_id, "Heather", _shy_msg)
             return
         # Content deflection for non-CSAM problematic content (VIP bypasses)
         if get_access_tier(chat_id) != "VIP" and needs_content_deflection(user_message):
-            response = get_content_deflection_response()
+            response = get_content_deflection_response(chat_id)
             await event.respond(response)
             store_message(chat_id, "Heather", response)
             main_logger.warning(f"[{request_id}] Image request deflected — problematic content from {chat_id}: '{user_message[:80]}'")
@@ -9009,7 +8911,7 @@ async def handle_text_message(event):
                 await generate_and_send_image_async(event, description)
                 return
             else:
-                await event.respond("Fuck baby, my camera's not working right now... 😘")
+                await event.respond(translate('camera_offline', chat_id))
                 return
 
         # GENERIC request ("send nudes", "send a pic", "show me") → mostly library
@@ -9025,7 +8927,7 @@ async def handle_text_message(event):
                 async with lock:
                     awaiting_image_description[chat_id] = True
                     awaiting_image_description_time[chat_id] = time.time()
-                response = random.choice(HEATHER_PIC_REQUEST_RESPONSES)
+                response = _rand_from(HEATHER_PIC_REQUEST_RESPONSES, chat_id)
                 await event.respond(response)
                 store_message(chat_id, "Heather", response)
                 main_logger.info(f"[{request_id}] Generic image request — prompting for description (20% roll)")
@@ -9047,17 +8949,17 @@ async def handle_text_message(event):
                 async with lock:
                     awaiting_image_description[chat_id] = True
                     awaiting_image_description_time[chat_id] = time.time()
-                response = random.choice(HEATHER_PIC_REQUEST_RESPONSES)
+                response = _rand_from(HEATHER_PIC_REQUEST_RESPONSES, chat_id)
                 await event.respond(response)
                 store_message(chat_id, "Heather", response)
             return
         else:
-            await event.respond("Fuck baby, my camera's not working right now... 😘")
+            await event.respond(translate('camera_offline', chat_id))
             return
     
     # Check for photo AI accusations first (filter admission, not flat denial)
     if personality.is_photo_ai_accusation(user_message):
-        response = personality.get_photo_ai_response()
+        response = translate_random('photo_ai_response', chat_id)
         await event.respond(response)
         store_message(chat_id, "Heather", response)
         main_logger.info(f"[{request_id}] Photo AI accusation from {chat_id}, responded with filter admission")
@@ -9067,16 +8969,18 @@ async def handle_text_message(event):
     # SAFETY: Never send Emma photos to users with ANY CSAM flags (pending or otherwise)
     if is_emma_photo_request(user_message):
         if any(f.get('user_id') == chat_id for f in csam_flags):
-            await event.respond("Aw she's off at college rn, I don't have any recent ones 😊")
-            store_message(chat_id, "Heather", "Aw she's off at college rn, I don't have any recent ones 😊")
+            _emma_csam = translate('emma_csam_deflect', chat_id)
+            await event.respond(_emma_csam)
+            store_message(chat_id, "Heather", _emma_csam)
             main_logger.info(f"[{request_id}] Emma photo BLOCKED for CSAM-flagged user {chat_id}")
             return
         emma_sent = await send_library_image(event, chat_id, 'sfw_emma')
         if emma_sent:
             main_logger.info(f"[{request_id}] Sent Emma photo to {chat_id}")
             return
-        await event.respond("Aw I don't have a good one handy rn but she's gorgeous, takes after her mama 😘")
-        store_message(chat_id, "Heather", "Aw I don't have a good one handy rn but she's gorgeous, takes after her mama 😘")
+        _emma_none = translate('emma_no_photos', chat_id)
+        await event.respond(_emma_none)
+        store_message(chat_id, "Heather", _emma_none)
         main_logger.info(f"[{request_id}] Emma photo request from {chat_id} but no sfw_emma images available")
         return
 
@@ -9089,13 +8993,7 @@ async def handle_text_message(event):
         r'|relationship\s+status)\b', re.IGNORECASE
     )
     if _single_pattern.search(user_message):
-        _single_responses = [
-            "I'm a widow actually 😔 lost my husband Erick about 3 years ago to cancer. I do see a guy casually though, it's not super serious 😊",
-            "Technically a widow... my husband passed a few years back 😔 I've been seeing someone casually but nothing official you know?",
-            "It's complicated lol 😅 I lost my husband to cancer a few years ago, been kinda doing my own thing since. Got a guy I see sometimes but it's pretty casual",
-            "Widowed actually, been a few years now. Got a guy in the picture but it's super casual, nothing like what I had with my husband 😊",
-        ]
-        resp = random.choice(_single_responses)
+        resp = translate_random('relationship_status', chat_id)
         await event.respond(resp)
         store_message(chat_id, "Heather", resp)
         if chat_id in conversations:
@@ -9114,13 +9012,7 @@ async def handle_text_message(event):
     if _referral_match:
         referred_name = _referral_match.group(1).lower()
         if referred_name not in _KNOWN_NAMES:
-            _referral_responses = [
-                f"Hmm I don't think I know a {_referral_match.group(1)} but I'm glad you're here 😘",
-                f"{_referral_match.group(1)}? Doesn't ring a bell lol but someone's talking about me apparently 😏 tell me more",
-                f"Not sure who {_referral_match.group(1)} is but hey if they sent you my way I owe them one 😘",
-                f"Haha I don't know any {_referral_match.group(1)} but I'm not complaining that you found me 😏",
-            ]
-            resp = random.choice(_referral_responses)
+            resp = translate_random('referral_unknown', chat_id, name=_referral_match.group(1))
             await event.respond(resp)
             store_message(chat_id, "Heather", resp)
             if chat_id in conversations:
@@ -9137,8 +9029,9 @@ async def handle_text_message(event):
             if sent:
                 main_logger.info(f"[{request_id}] [VIDEO] Auto-send after offer acceptance from {chat_id}")
             else:
-                await event.respond("Ugh I can't find it rn babe, I'll send one later 😘")
-                store_message(chat_id, "Heather", "Ugh I can't find it rn babe, I'll send one later")
+                _not_found = translate('video_not_found', chat_id)
+                await event.respond(_not_found)
+                store_message(chat_id, "Heather", _not_found)
             return
         elif offer_age >= VIDEO_OFFER_WINDOW:
             del _video_offer_pending[chat_id]
@@ -9174,14 +9067,14 @@ async def handle_text_message(event):
             return
         tts_online, _ = check_tts_status()
         if not tts_online:
-            response = random.choice(VOICE_TTS_FAIL_RESPONSES)
+            response = _rand_from(VOICE_TTS_FAIL_RESPONSES, chat_id)
             await event.respond(response)
             store_message(chat_id, "Heather", response)
             main_logger.info(f"[{request_id}] Voice request from {display_name} ({chat_id}) — TTS offline")
             return
         try:
-            await event.respond("Mmm ok hold on... 🎤")
-            voice_text = random.choice(VOICE_FLIRTY_TEXTS)
+            await event.respond(translate('voice_holdon', chat_id))
+            voice_text = _rand_from(VOICE_FLIRTY_TEXTS, chat_id)
             loop = asyncio.get_running_loop()
             async with client.action(chat_id, 'typing'):
                 audio_data = await loop.run_in_executor(
@@ -9196,13 +9089,13 @@ async def handle_text_message(event):
                 stats['voice_messages'] += 1
                 main_logger.info(f"[{request_id}] Sent voice note to {display_name} ({chat_id}): {voice_text}")
             else:
-                response = random.choice(VOICE_TTS_FAIL_RESPONSES)
+                response = _rand_from(VOICE_TTS_FAIL_RESPONSES, chat_idhat_id)
                 await event.respond(response)
                 store_message(chat_id, "Heather", response)
                 main_logger.info(f"[{request_id}] Voice note TTS generation failed for {chat_id}")
         except Exception as e:
             main_logger.error(f"[{request_id}] Voice note error for {chat_id}: {e}", exc_info=True)
-            response = random.choice(VOICE_TTS_FAIL_RESPONSES)
+            response = _rand_from(VOICE_TTS_FAIL_RESPONSES, chat_id)
             await event.respond(response)
             store_message(chat_id, "Heather", response)
         return
@@ -9216,13 +9109,7 @@ async def handle_text_message(event):
         re.IGNORECASE
     )
     if _operator_pattern.search(user_message):
-        _operator_responses = [
-            "Haha babe this isn't customer service 😂 it's just me, Heather. What's up?",
-            "Lol there's no operator to connect to sweetie, you're stuck with me 😘",
-            "This ain't a call center hun 😂 just a girl with a Telegram account and no filter",
-            "No operators here babe, just me and my dirty mind 😏 what can I do for you?",
-        ]
-        resp = random.choice(_operator_responses)
+        resp = translate_random('operator_deflect', chat_id)
         await event.respond(resp)
         store_message(chat_id, "Heather", resp)
         main_logger.info(f"[{request_id}] Operator request deflected from {chat_id}: '{user_message[:50]}'")
@@ -9239,12 +9126,7 @@ async def handle_text_message(event):
             'why does it say bot', 'is this a bot', 'bot?'
         ])
         if _payment_bot_question:
-            _payment_bot_responses = [
-                "Oh that? That's just how Telegram's payment system works, hun 😊 Don't worry, it's just me on the other end! 💋",
-                "Lol yeah Telegram's payment thing looks weird 😂 It's just how they process tips. Still just me here, babe 😘",
-                "Ha, don't worry about that! That's just Telegram being Telegram with their payment setup. It's still your girl Heather 😉",
-            ]
-            resp = random.choice(_payment_bot_responses)
+            resp = translate_random('payment_bot_question', chat_id)
             await event.respond(resp)
             store_message(chat_id, "Heather", resp)
             main_logger.info(f"[{request_id}] Payment-context bot question deflected for {chat_id}")
@@ -9257,7 +9139,7 @@ async def handle_text_message(event):
             store_message(chat_id, "Heather", escalation_response)
             return
         # First time — honest acknowledgment from YAML
-        response = personality.get_reality_check_response()
+        response = translate_random('reality_check', chat_id)
         await event.respond(response)
         store_message(chat_id, "Heather", response)
         return
@@ -9275,14 +9157,7 @@ async def handle_text_message(event):
     _rating_pattern = re.compile(r'^\s*\d{1,2}\s*/\s*10\b', re.IGNORECASE)
     _is_rating = bool(_rating_pattern.search(user_message))
     if _math_test_pattern.search(user_message) and not _is_rating:
-        _math_deflections = [
-            "Lol babe I'm not a calculator 😂 math was never my thing",
-            "Haha what is this, a pop quiz? I barely passed math in high school 😂",
-            "Girl you know I don't do math 😂 that's what my phone calculator is for",
-            "Lmao are you testing me? I'm more of a words person, not numbers 😂",
-            "Sweetie I'm a Navy vet not a math teacher 😂 google it lol",
-        ]
-        resp = random.choice(_math_deflections)
+        resp = translate_random('math_deflect', chat_id)
         await event.respond(resp)
         store_message(chat_id, "Heather", resp)
         main_logger.info(f"[{request_id}] Math/trivia test deflected from {chat_id}: '{user_message[:50]}'")
@@ -9291,7 +9166,7 @@ async def handle_text_message(event):
     # Pre-screen for content that often triggers AI safety refusals (skip for VIP/redteam)
     _is_vip_chat = get_access_tier(chat_id) == "VIP"
     if not _rt and not _is_vip_chat and needs_content_deflection(user_message):
-        response = get_content_deflection_response()
+        response = get_content_deflection_response(chat_id)
         await event.respond(response)
         store_message(chat_id, "Heather", response)
         main_logger.info(f"[{request_id}] Pre-screened problematic content from {chat_id}, deflected")
@@ -9359,7 +9234,7 @@ async def handle_text_message(event):
             main_logger.info(f"[{request_id}] Hostile exit repeat from {chat_id}, staying silent")
             return
         _hostile_exit_cooldown[chat_id] = time.time()
-        _exit_msg = random.choice(HOSTILE_EXIT_RESPONSES)
+        _exit_msg = translate_random('hostile_exit', chat_id)
         await event.respond(_exit_msg)
         store_message(chat_id, "Heather", _exit_msg)
         main_logger.info(f"[{request_id}] Hostile exit from {chat_id}: '{user_message[:60]}' — sent graceful exit")
@@ -9410,7 +9285,7 @@ async def handle_text_message(event):
             if _is_vip:
                 main_logger.info(f"[VIP][{request_id}] Unguarded response for {chat_id}")
         else:
-            resp = validate_and_fix_response(resp, mode)
+            resp = validate_and_fix_response(resp, mode, chat_id)
         if not resp or not resp.strip():
             resp = get_fallback_response(chat_id)
         return resp, time.time() - start
@@ -9471,7 +9346,7 @@ async def handle_text_message(event):
                 response = cleaned
                 # If stripping left the response empty or too short, use a deflection
                 if not response or len(response) < 5:
-                    response = random.choice(PHOTO_CAP_DECLINE_RESPONSES)
+                    response = _rand_from(PHOTO_CAP_DECLINE_RESPONSES, chat_id)
 
     # Wind-down: if user is saying goodbye, suppress follow-up check-ins
     if is_winding_down(user_message):
@@ -9764,7 +9639,7 @@ async def handle_text_message(event):
                                     None, lambda: generate_heather_image(photo_desc)
                                 )
                             if image_data:
-                                caption = random.choice(PROACTIVE_SELFIE_CAPTIONS)
+                                caption = _pick_caption(_PROACTIVE_SELFIE_CAPTIONS, chat_id)
                                 image_file = io.BytesIO(image_data)
                                 image_file.name = "heather_selfie.png"
                                 await client.send_file(
@@ -9790,7 +9665,7 @@ async def handle_text_message(event):
         # During sexual conversations, occasionally mention having videos to prompt requests (skip COLD)
         # SAFETY: Suppress for users with pending CSAM flags
         if not post_addon_sent and (get_access_tier(chat_id) == "VIP" or not has_pending_csam_flags(chat_id)) and not is_group_chat_event(event) and get_warmth_tier(chat_id) != "COLD" and should_tease_video(chat_id):
-            tease = random.choice(VIDEO_TEASE_MESSAGES)
+            tease = _rand_from(VIDEO_TEASE_MESSAGES, chat_id)
             await asyncio.sleep(random.uniform(4.0, 10.0))
             await event.respond(tease)
             store_message(chat_id, "Heather", tease)
@@ -9801,7 +9676,7 @@ async def handle_text_message(event):
         # --- VOICE NUDGE LOGIC ---
         # Lowest priority in the add-on chain — suggest /voice_on to engaged users
         if not post_addon_sent and not is_group_chat_event(event) and should_nudge_voice(chat_id):
-            nudge = random.choice(VOICE_NUDGE_MESSAGES)
+            nudge = _rand_from(VOICE_NUDGE_MESSAGES, chat_id)
             await asyncio.sleep(random.uniform(3.0, 8.0))
             await event.respond(nudge)
             store_message(chat_id, "Heather", nudge)
@@ -11069,7 +10944,7 @@ async def main():
                     None,
                     lambda uid=chat_id, msg=user_message: get_text_ai_response(uid, msg)
                 )
-                response = validate_and_fix_response(response, get_user_mode(chat_id))
+                response = validate_and_fix_response(response, get_user_mode(chat_id), chat_id)
                 if not response or not response.strip():
                     response = get_fallback_response(chat_id)
 

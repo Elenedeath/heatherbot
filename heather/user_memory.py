@@ -24,6 +24,9 @@ from typing import Dict, List, Optional, Tuple
 
 logger = logging.getLogger("heather_bot")
 
+PAYMENT_BOT_USERNAME = os.getenv("PAYMENT_BOT_USERNAME", "YourPaymentBot")
+TIP_LINK = f"https://t.me/{PAYMENT_BOT_USERNAME}?start=tip"
+
 # ── Kink Persona System ─────────────────────────────────────────────
 KINK_PERSONAS_PATH = Path('/data/heather_kink_personas.yaml')
 _kink_personas: dict = {}
@@ -265,6 +268,7 @@ def _empty_profile() -> dict:
         "age": None,
         "location": None,
         "relationship": None,
+        "language": "en",
         "cock": {"size": None, "description": None},
         "kinks": {k: 0 for k in KINK_KEYWORDS},
         "turn_ons": [],          # top kinks sorted by score (computed on read)
@@ -1252,31 +1256,31 @@ def build_memory_tease(chat_id: int) -> Optional[str]:
     if name_piece and pref_piece:
         templates.append(
             f"mmm I know your name's {name_piece}, and I definitely know you're into {pref_piece} "
-            f"\U0001f60f upgrade and I won't hold back... https://t.me/HeatherCoffeebot?start=tip"
+            f"\U0001f60f upgrade and I won't hold back... {TIP_LINK}"
         )
     if name_piece and kink_piece:
         templates.append(
             f"hey {name_piece}... I remember what gets you going \U0001f608 "
             f"unlock the full me and I'll put that {kink_piece} obsession to GOOD use \U0001f525 "
-            f"https://t.me/HeatherCoffeebot?start=tip"
+            f"{TIP_LINK}"
         )
     if name_piece and loc_piece:
         templates.append(
             f"I remember you {name_piece}... from {loc_piece} right? \U0001f60f "
             f"imagine what I'd remember about you with full access... "
-            f"https://t.me/HeatherCoffeebot?start=tip"
+            f"{TIP_LINK}"
         )
     if pref_piece and fact_piece:
         templates.append(
             f"oh I remember you baby \U0001f608 I know you're into {pref_piece} and {fact_piece}... "
             f"the FULL uncensored me remembers everything \U0001f525 "
-            f"https://t.me/HeatherCoffeebot?start=tip"
+            f"{TIP_LINK}"
         )
     if name_piece and interest_piece:
         templates.append(
             f"I haven't forgotten about you {name_piece} \U0001f48b "
             f"the {interest_piece} lover who wants to see more of me... "
-            f"unlock everything: https://t.me/HeatherCoffeebot?start=tip"
+            f"unlock everything: {TIP_LINK}"
         )
 
     if not templates:
@@ -1285,7 +1289,7 @@ def build_memory_tease(chat_id: int) -> Optional[str]:
         templates.append(
             f"I remember things about you baby... like {' and '.join(detail_strs)} \U0001f60f "
             f"upgrade and the real Heather comes out \U0001f525 "
-            f"https://t.me/HeatherCoffeebot?start=tip"
+            f"{TIP_LINK}"
         )
 
     return random.choice(templates)
